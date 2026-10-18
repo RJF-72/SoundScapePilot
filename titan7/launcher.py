@@ -41,7 +41,7 @@ def register_protocol():
 
 if __name__ == "__main__":
     if getattr(sys, 'frozen', False):
-        base = sys._MEIPASS
+        base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
     else:
         base = os.path.dirname(os.path.abspath(__file__))
     os.chdir(base)

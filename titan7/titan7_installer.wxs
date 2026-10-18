@@ -1,0 +1,512 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="SoundScape Pilot" Language="1033" Version="1.0.0.0" Manufacturer="Redemption Road Music Group" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of SoundScape Pilot is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Feature Id="ProductFeature" Title="SoundScape Pilot" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+    <UI>
+      <UIRef Id="WixUI_Minimal" />
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg">NOT Installed</Publish>
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
+      <Publish Dialog="InstallDirDlg" Control="Next" Event="InstallFiles">1</Publish>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return">!IsInstalled AND NOT InstallCancel</Publish>
+    </UI>
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+  </Product>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder" Name="PFiles">
+        <Directory Id="REDMPTIONROAD" Name="Redemption Road Music Group">
+          <Directory Id="INSTALLFOLDER" Name="SoundScape Pilot">
+            <Directory Id="DIR__internal" Name="_internal">
+          </Directory>
+            <Directory Id="DIR_modules" Name="modules">
+          </Directory>
+            <Directory Id="DIR_static" Name="static">
+          </Directory>
+            <Directory Id="DIR_web" Name="web">
+              <Directory Id="DIR__internal_certifi" Name="certifi">
+          </Directory>
+              <Directory Id="DIR__internal_charset_normalizer" Name="charset_normalizer">
+          </Directory>
+              <Directory Id="DIR__internal_click_8_5_0_dist_info" Name="click-8.5.0.dist-info">
+          </Directory>
+              <Directory Id="DIR__internal_itsdangerous_2_2_0_dist_info" Name="itsdangerous-2.2.0.dist-info">
+          </Directory>
+              <Directory Id="DIR__internal_modules" Name="modules">
+          </Directory>
+              <Directory Id="DIR__internal_opentelemetry_api_1_45_1_dist_info" Name="opentelemetry_api-1.45.1.dist-info">
+          </Directory>
+              <Directory Id="DIR__internal_psutil" Name="psutil">
+          </Directory>
+              <Directory Id="DIR__internal_pydantic_2_14_1_dist_info" Name="pydantic-2.14.1.dist-info">
+          </Directory>
+              <Directory Id="DIR__internal_pydantic_core" Name="pydantic_core">
+          </Directory>
+              <Directory Id="DIR__internal_setuptools" Name="setuptools">
+          </Directory>
+              <Directory Id="DIR__internal_static" Name="static">
+          </Directory>
+              <Directory Id="DIR__internal_web" Name="web">
+          </Directory>
+              <Directory Id="DIR_web_app" Name="app">
+                <Directory Id="DIR__internal_click_8_5_0_dist_info_licenses" Name="licenses">
+          </Directory>
+                <Directory Id="DIR__internal_opentelemetry_api_1_45_1_dist_info_licenses" Name="licenses">
+          </Directory>
+                <Directory Id="DIR__internal_pydantic_2_14_1_dist_info_licenses" Name="licenses">
+          </Directory>
+                <Directory Id="DIR__internal_setuptools__vendor" Name="_vendor">
+          </Directory>
+                <Directory Id="DIR__internal_web_app" Name="app">
+          </Directory>
+                <Directory Id="DIR_web_app_login" Name="login">
+          </Directory>
+                <Directory Id="DIR_web_app_marketing" Name="marketing">
+          </Directory>
+                <Directory Id="DIR_web_app_mercantile" Name="mercantile">
+                  <Directory Id="DIR__internal_setuptools__vendor_jaraco" Name="jaraco">
+          </Directory>
+                  <Directory Id="DIR__internal_web_app_login" Name="login">
+          </Directory>
+                  <Directory Id="DIR__internal_web_app_marketing" Name="marketing">
+          </Directory>
+                  <Directory Id="DIR__internal_web_app_mercantile" Name="mercantile">
+                    <Directory Id="DIR__internal_setuptools__vendor_jaraco_text" Name="text">
+          </Directory>
+          </Directory>
+          </Directory>
+          </Directory>
+          </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder" Name="Programs">
+        <Directory Id="APPSTARTMENU" Name="SoundScape Pilot" />
+      </Directory>
+      <Directory Id="DesktopFolder" Name="Desktop" />
+    </Directory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents">
+      <Component Id="cmp_0" Directory="INSTALLFOLDER" Guid="0C5D2D40-C829-4952-9953-60F5E2C76770">
+        <File Id="fil_0" Source="dist\SoundScapePilot\SoundScapePilot.exe" KeyPath="yes" />
+        <Shortcut Id="shortcutStartMenu" Name="SoundScape Pilot" Description="SoundScape Pilot - Music Industry Command Center" Target="[#fil_0]" WorkingDirectory="INSTALLFOLDER" Advertise="yes" />
+        <RemoveFolder Id="removeStartMenu" Directory="APPSTARTMENU" On="uninstall" />
+        <Shortcut Id="shortcutDesktop" Name="SoundScape Pilot" Description="SoundScape Pilot - Music Industry Command Center" Target="[#fil_0]" WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="removeDesktop" Directory="DesktopFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Redemption Road Music Group\SoundScape Pilot" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_1" Directory="DIR_modules" Guid="9723B0AA-1658-431D-9DAB-96158B73AE7B">
+        <File Id="fil_1" Source="dist\SoundScapePilot\modules\ai_marketing.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_2" Directory="DIR_modules" Guid="1360B9C8-5F13-4C28-B3CF-C15EFD9066B2">
+        <File Id="fil_2" Source="dist\SoundScapePilot\modules\booking_agent.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_3" Directory="DIR_modules" Guid="4367E68C-F799-4F5A-BA3D-9075B57C6600">
+        <File Id="fil_3" Source="dist\SoundScapePilot\modules\catalog_manager.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_4" Directory="DIR_modules" Guid="FCBF516A-3319-4F51-96B1-F4FB9E4DFE15">
+        <File Id="fil_4" Source="dist\SoundScapePilot\modules\database.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_5" Directory="DIR_modules" Guid="73CC956F-512C-4598-8E27-DE31BC8E718B">
+        <File Id="fil_5" Source="dist\SoundScapePilot\modules\distribution_pipeline.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_6" Directory="DIR_modules" Guid="9E1F6D9C-A404-47CF-9B5C-11E5BF56B790">
+        <File Id="fil_6" Source="dist\SoundScapePilot\modules\epk_engine.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_7" Directory="DIR_modules" Guid="A13D55AE-8DFF-47F9-95FE-D423358136F7">
+        <File Id="fil_7" Source="dist\SoundScapePilot\modules\label_identity.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_8" Directory="DIR_modules" Guid="3F74F398-609A-4474-A013-12C5D9D06736">
+        <File Id="fil_8" Source="dist\SoundScapePilot\modules\mailer.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_9" Directory="DIR_modules" Guid="3E4C16CC-3121-48C0-8BF8-CAEEF692AB3F">
+        <File Id="fil_9" Source="dist\SoundScapePilot\modules\pricing_model.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_10" Directory="DIR_modules" Guid="5584D36A-4AB9-40F3-B5CC-AD2AAA6E3014">
+        <File Id="fil_10" Source="dist\SoundScapePilot\modules\pr_wire.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_11" Directory="DIR_modules" Guid="0EB2ED12-96DA-4C47-BC1E-3B0FE66C1798">
+        <File Id="fil_11" Source="dist\SoundScapePilot\modules\radio_finder.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_12" Directory="DIR_modules" Guid="72F76385-2331-4B4F-8426-0EBE4C7EF16A">
+        <File Id="fil_12" Source="dist\SoundScapePilot\modules\royalty_engine.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_13" Directory="DIR_modules" Guid="A0DC9BB3-C5CC-44F1-8BE8-4C9CAEA5105E">
+        <File Id="fil_13" Source="dist\SoundScapePilot\modules\sync_licensing.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_14" Directory="DIR_static" Guid="501887AC-BBBD-4519-8E9F-84AE336878C6">
+        <File Id="fil_14" Source="dist\SoundScapePilot\static\index.html" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_15" Directory="DIR_web" Guid="AFB70282-4485-4E84-81CB-3234A0B25732">
+        <File Id="fil_15" Source="dist\SoundScapePilot\web\next-env.d.ts" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_16" Directory="DIR_web" Guid="B435F2E4-1237-4C05-A270-324E006101A4">
+        <File Id="fil_16" Source="dist\SoundScapePilot\web\package-lock.json" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_17" Directory="DIR_web" Guid="04CAC6EC-5628-44AE-84E0-2606A1A9C236">
+        <File Id="fil_17" Source="dist\SoundScapePilot\web\package.json" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_18" Directory="DIR_web_app" Guid="95C8A929-D6CF-487C-9B4C-8E185222F93C">
+        <File Id="fil_18" Source="dist\SoundScapePilot\web\app\layout.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_19" Directory="DIR_web_app" Guid="12699DAB-B420-4793-B49E-0B51E6264DF4">
+        <File Id="fil_19" Source="dist\SoundScapePilot\web\app\page.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_20" Directory="DIR_web_app_login" Guid="3AEA9630-465E-4D93-A3D0-39BC641EADFB">
+        <File Id="fil_20" Source="dist\SoundScapePilot\web\app\login\page.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_21" Directory="DIR_web_app_marketing" Guid="C127B519-9A8C-4A4E-8FC0-587DCE5D4CDC">
+        <File Id="fil_21" Source="dist\SoundScapePilot\web\app\marketing\page.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_22" Directory="DIR_web_app_mercantile" Guid="6CA5DAB8-A74C-4C34-BD32-13D873E51DBC">
+        <File Id="fil_22" Source="dist\SoundScapePilot\web\app\mercantile\page.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_23" Directory="DIR__internal" Guid="73689967-FF03-4E6F-B795-56527D91FA96">
+        <File Id="fil_23" Source="dist\SoundScapePilot\_internal\base_library.zip" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_24" Directory="DIR__internal" Guid="27DC03E7-63C9-4C57-B3BB-883B0C49E21F">
+        <File Id="fil_24" Source="dist\SoundScapePilot\_internal\libcrypto-3.dll" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_25" Directory="DIR__internal" Guid="18F40A33-0630-464B-A222-7152CB626AB9">
+        <File Id="fil_25" Source="dist\SoundScapePilot\_internal\libffi-8.dll" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_26" Directory="DIR__internal" Guid="3D35381D-BF29-4712-9996-993C6821490C">
+        <File Id="fil_26" Source="dist\SoundScapePilot\_internal\libssl-3.dll" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_27" Directory="DIR__internal" Guid="A8980E83-0F36-4621-8C11-FA40EAFF4B7E">
+        <File Id="fil_27" Source="dist\SoundScapePilot\_internal\pyexpat.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_28" Directory="DIR__internal" Guid="1D93A7F3-52E0-401B-908B-09D408D02689">
+        <File Id="fil_28" Source="dist\SoundScapePilot\_internal\python3.dll" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_29" Directory="DIR__internal" Guid="4158A6BF-02E3-4409-B7CF-6F7DB0F78B35">
+        <File Id="fil_29" Source="dist\SoundScapePilot\_internal\python314.dll" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_30" Directory="DIR__internal" Guid="074BBCCB-8810-4435-AFBA-CE8C11965C3E">
+        <File Id="fil_30" Source="dist\SoundScapePilot\_internal\select.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_31" Directory="DIR__internal" Guid="9541D4B9-E66A-4888-8D63-C00B89D69214">
+        <File Id="fil_31" Source="dist\SoundScapePilot\_internal\sqlite3.dll" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_32" Directory="DIR__internal" Guid="7E46E34B-58B0-41FF-98AA-D116ECEFA668">
+        <File Id="fil_32" Source="dist\SoundScapePilot\_internal\unicodedata.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_33" Directory="DIR__internal" Guid="5B9F9452-2B58-4D18-ACB8-70453024F8A1">
+        <File Id="fil_33" Source="dist\SoundScapePilot\_internal\VCRUNTIME140.dll" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_34" Directory="DIR__internal" Guid="3A367426-1149-4004-A155-0F9FB8F93CB2">
+        <File Id="fil_34" Source="dist\SoundScapePilot\_internal\VCRUNTIME140_1.dll" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_35" Directory="DIR__internal" Guid="31F1A950-DE09-48A2-84FD-BE40A8144F2F">
+        <File Id="fil_35" Source="dist\SoundScapePilot\_internal\_asyncio.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_36" Directory="DIR__internal" Guid="A87D2823-8CFB-4BE3-9655-D74EEA258DCC">
+        <File Id="fil_36" Source="dist\SoundScapePilot\_internal\_bz2.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_37" Directory="DIR__internal" Guid="E800ADAC-F086-4028-8AA6-CCDC8DEA6546">
+        <File Id="fil_37" Source="dist\SoundScapePilot\_internal\_ctypes.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_38" Directory="DIR__internal" Guid="A4A91757-BE58-40C7-946B-16D64B6DC8CC">
+        <File Id="fil_38" Source="dist\SoundScapePilot\_internal\_decimal.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_39" Directory="DIR__internal" Guid="8DECB4D9-3CCF-42D9-AC55-F02CE0E06C2C">
+        <File Id="fil_39" Source="dist\SoundScapePilot\_internal\_hashlib.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_40" Directory="DIR__internal" Guid="69FF8436-E24D-47CE-B01C-0CEDD7CB57D7">
+        <File Id="fil_40" Source="dist\SoundScapePilot\_internal\_lzma.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_41" Directory="DIR__internal" Guid="DC4106F7-EAA4-43BA-B8F2-609E80FFCD05">
+        <File Id="fil_41" Source="dist\SoundScapePilot\_internal\_multiprocessing.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_42" Directory="DIR__internal" Guid="9A1E0461-72AB-4E99-91F8-E52CB212C293">
+        <File Id="fil_42" Source="dist\SoundScapePilot\_internal\_overlapped.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_43" Directory="DIR__internal" Guid="36FDDA34-9013-4F29-BA32-5965F9D40641">
+        <File Id="fil_43" Source="dist\SoundScapePilot\_internal\_queue.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_44" Directory="DIR__internal" Guid="4DFFF0FE-3356-44A7-B860-10E390A010DF">
+        <File Id="fil_44" Source="dist\SoundScapePilot\_internal\_socket.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_45" Directory="DIR__internal" Guid="E6D33900-0C83-4807-A6A7-0CA4DD87D7C6">
+        <File Id="fil_45" Source="dist\SoundScapePilot\_internal\_sqlite3.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_46" Directory="DIR__internal" Guid="4B8145E9-CF37-4BF8-825A-DE473337F003">
+        <File Id="fil_46" Source="dist\SoundScapePilot\_internal\_ssl.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_47" Directory="DIR__internal" Guid="CA4282D2-E221-481C-8292-4210689B8B8A">
+        <File Id="fil_47" Source="dist\SoundScapePilot\_internal\_uuid.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_48" Directory="DIR__internal" Guid="C97C64F6-BBDA-4ACD-A884-C51141A2ACD3">
+        <File Id="fil_48" Source="dist\SoundScapePilot\_internal\_wmi.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_49" Directory="DIR__internal" Guid="4C00A21B-973C-4E03-A8D1-26EFBF931ED9">
+        <File Id="fil_49" Source="dist\SoundScapePilot\_internal\_zoneinfo.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_50" Directory="DIR__internal" Guid="9818853B-A574-4D28-B880-C4F43669927E">
+        <File Id="fil_50" Source="dist\SoundScapePilot\_internal\_zstd.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_51" Directory="DIR__internal_certifi" Guid="502E009B-4217-4366-B133-F227286EBB5D">
+        <File Id="fil_51" Source="dist\SoundScapePilot\_internal\certifi\cacert.pem" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_52" Directory="DIR__internal_certifi" Guid="BE966156-FC10-493C-9F4F-89BD607E4299">
+        <File Id="fil_52" Source="dist\SoundScapePilot\_internal\certifi\py.typed" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_53" Directory="DIR__internal_charset_normalizer" Guid="87D9BE0B-350B-44FE-82E3-92BFBFA8CA16">
+        <File Id="fil_53" Source="dist\SoundScapePilot\_internal\charset_normalizer\cd.cp314-win_amd64.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_54" Directory="DIR__internal_charset_normalizer" Guid="823A2F3A-0EBF-4290-B1F2-A94B28CA6785">
+        <File Id="fil_54" Source="dist\SoundScapePilot\_internal\charset_normalizer\md.cp314-win_amd64.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_55" Directory="DIR__internal_click_8_5_0_dist_info" Guid="DA25E9CA-D1FF-41E6-A954-C683E6A90EE5">
+        <File Id="fil_55" Source="dist\SoundScapePilot\_internal\click-8.5.0.dist-info\INSTALLER" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_56" Directory="DIR__internal_click_8_5_0_dist_info" Guid="54C107AB-CC05-40CD-9540-7B4E315E6BD6">
+        <File Id="fil_56" Source="dist\SoundScapePilot\_internal\click-8.5.0.dist-info\METADATA" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_57" Directory="DIR__internal_click_8_5_0_dist_info" Guid="3662392B-ACC8-42A5-B175-E53D65463648">
+        <File Id="fil_57" Source="dist\SoundScapePilot\_internal\click-8.5.0.dist-info\RECORD" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_58" Directory="DIR__internal_click_8_5_0_dist_info" Guid="04B9C8EB-68A4-4F6B-9740-5A257F10E96C">
+        <File Id="fil_58" Source="dist\SoundScapePilot\_internal\click-8.5.0.dist-info\WHEEL" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_59" Directory="DIR__internal_click_8_5_0_dist_info_licenses" Guid="E1877866-45E8-42A6-8BF4-5052D8ECAF1F">
+        <File Id="fil_59" Source="dist\SoundScapePilot\_internal\click-8.5.0.dist-info\licenses\LICENSE.txt" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_60" Directory="DIR__internal_itsdangerous_2_2_0_dist_info" Guid="43A82462-2D55-4C8C-A41F-F76014D8B9F4">
+        <File Id="fil_60" Source="dist\SoundScapePilot\_internal\itsdangerous-2.2.0.dist-info\INSTALLER" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_61" Directory="DIR__internal_itsdangerous_2_2_0_dist_info" Guid="16B101D5-36A8-4BD9-82E5-D3A8AB2BA342">
+        <File Id="fil_61" Source="dist\SoundScapePilot\_internal\itsdangerous-2.2.0.dist-info\LICENSE.txt" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_62" Directory="DIR__internal_itsdangerous_2_2_0_dist_info" Guid="3741B7BE-BD94-4730-8A20-EF1802E15CD9">
+        <File Id="fil_62" Source="dist\SoundScapePilot\_internal\itsdangerous-2.2.0.dist-info\METADATA" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_63" Directory="DIR__internal_itsdangerous_2_2_0_dist_info" Guid="B2E30278-CE32-430D-8530-72881BC7F32A">
+        <File Id="fil_63" Source="dist\SoundScapePilot\_internal\itsdangerous-2.2.0.dist-info\RECORD" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_64" Directory="DIR__internal_itsdangerous_2_2_0_dist_info" Guid="14609EC7-1571-4CC6-AD01-BAC886C8C880">
+        <File Id="fil_64" Source="dist\SoundScapePilot\_internal\itsdangerous-2.2.0.dist-info\WHEEL" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_65" Directory="DIR__internal_modules" Guid="C2091AFA-558E-4D45-9072-278B94C83207">
+        <File Id="fil_65" Source="dist\SoundScapePilot\_internal\modules\ai_marketing.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_66" Directory="DIR__internal_modules" Guid="BA0ADFDC-4BE4-40DE-93B4-097C4F7E3DC0">
+        <File Id="fil_66" Source="dist\SoundScapePilot\_internal\modules\booking_agent.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_67" Directory="DIR__internal_modules" Guid="6FE1BE63-5B52-4DEB-A8F5-01FFC99183C2">
+        <File Id="fil_67" Source="dist\SoundScapePilot\_internal\modules\catalog_manager.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_68" Directory="DIR__internal_modules" Guid="C6C78C87-535C-4786-9A9F-FF9841C8C097">
+        <File Id="fil_68" Source="dist\SoundScapePilot\_internal\modules\database.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_69" Directory="DIR__internal_modules" Guid="5A3F4E30-80AB-43C0-A791-95454F11F032">
+        <File Id="fil_69" Source="dist\SoundScapePilot\_internal\modules\distribution_pipeline.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_70" Directory="DIR__internal_modules" Guid="7A6442F8-9AFF-4EBB-AC9E-C985058605A1">
+        <File Id="fil_70" Source="dist\SoundScapePilot\_internal\modules\epk_engine.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_71" Directory="DIR__internal_modules" Guid="805EFF19-E129-47B4-B9E7-4BD09BF2088F">
+        <File Id="fil_71" Source="dist\SoundScapePilot\_internal\modules\label_identity.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_72" Directory="DIR__internal_modules" Guid="FD7F1C96-A114-443F-AF8D-5C61E78E3944">
+        <File Id="fil_72" Source="dist\SoundScapePilot\_internal\modules\mailer.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_73" Directory="DIR__internal_modules" Guid="E97F35F5-8460-49E0-89F7-C8D7C30A6FBE">
+        <File Id="fil_73" Source="dist\SoundScapePilot\_internal\modules\pricing_model.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_74" Directory="DIR__internal_modules" Guid="86A16FFF-6D3F-4ACC-BC15-697C23CB6718">
+        <File Id="fil_74" Source="dist\SoundScapePilot\_internal\modules\pr_wire.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_75" Directory="DIR__internal_modules" Guid="8B087D0D-5769-4F56-B687-C907917620B4">
+        <File Id="fil_75" Source="dist\SoundScapePilot\_internal\modules\radio_finder.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_76" Directory="DIR__internal_modules" Guid="0D5F7518-9A01-4B3C-B07E-899FA7CE048A">
+        <File Id="fil_76" Source="dist\SoundScapePilot\_internal\modules\royalty_engine.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_77" Directory="DIR__internal_modules" Guid="F7C7EBC4-3DB2-46FC-AEA4-577D248A1B9B">
+        <File Id="fil_77" Source="dist\SoundScapePilot\_internal\modules\sync_licensing.py" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_78" Directory="DIR__internal_opentelemetry_api_1_45_1_dist_info" Guid="18EEC714-D9A7-4E24-B4C8-C69C0A3B9610">
+        <File Id="fil_78" Source="dist\SoundScapePilot\_internal\opentelemetry_api-1.45.1.dist-info\entry_points.txt" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_79" Directory="DIR__internal_opentelemetry_api_1_45_1_dist_info" Guid="701AA5E3-FA00-4AB4-8E36-4C9E04328BC2">
+        <File Id="fil_79" Source="dist\SoundScapePilot\_internal\opentelemetry_api-1.45.1.dist-info\INSTALLER" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_80" Directory="DIR__internal_opentelemetry_api_1_45_1_dist_info" Guid="4EA7767D-AE5F-4A63-8524-B4AD8DB12A34">
+        <File Id="fil_80" Source="dist\SoundScapePilot\_internal\opentelemetry_api-1.45.1.dist-info\METADATA" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_81" Directory="DIR__internal_opentelemetry_api_1_45_1_dist_info" Guid="2CF4B198-3849-493D-9862-2A16FD4BCCFB">
+        <File Id="fil_81" Source="dist\SoundScapePilot\_internal\opentelemetry_api-1.45.1.dist-info\RECORD" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_82" Directory="DIR__internal_opentelemetry_api_1_45_1_dist_info" Guid="ACB9DD1E-F09D-4CF2-9956-EABE7994F1FF">
+        <File Id="fil_82" Source="dist\SoundScapePilot\_internal\opentelemetry_api-1.45.1.dist-info\WHEEL" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_83" Directory="DIR__internal_opentelemetry_api_1_45_1_dist_info_licenses" Guid="6B1EC7F9-FA60-4304-A6B9-0D6F978AD58C">
+        <File Id="fil_83" Source="dist\SoundScapePilot\_internal\opentelemetry_api-1.45.1.dist-info\licenses\LICENSE" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_84" Directory="DIR__internal_psutil" Guid="9226652C-E25E-4495-95F5-623BC8D1087A">
+        <File Id="fil_84" Source="dist\SoundScapePilot\_internal\psutil\_psutil_windows.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_85" Directory="DIR__internal_pydantic_2_14_1_dist_info" Guid="269659E6-BC26-461C-80FE-3B16D7E2A940">
+        <File Id="fil_85" Source="dist\SoundScapePilot\_internal\pydantic-2.14.1.dist-info\INSTALLER" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_86" Directory="DIR__internal_pydantic_2_14_1_dist_info" Guid="FF9B68D0-E730-46DE-A027-93E23B1F9706">
+        <File Id="fil_86" Source="dist\SoundScapePilot\_internal\pydantic-2.14.1.dist-info\METADATA" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_87" Directory="DIR__internal_pydantic_2_14_1_dist_info" Guid="34D32132-1B88-4D04-86C3-CB08D6ECFEA9">
+        <File Id="fil_87" Source="dist\SoundScapePilot\_internal\pydantic-2.14.1.dist-info\RECORD" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_88" Directory="DIR__internal_pydantic_2_14_1_dist_info" Guid="7E5722F2-7F24-4A9D-9F23-CFDC9F26EA3D">
+        <File Id="fil_88" Source="dist\SoundScapePilot\_internal\pydantic-2.14.1.dist-info\REQUESTED" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_89" Directory="DIR__internal_pydantic_2_14_1_dist_info" Guid="F1883518-95F7-4B29-B9D6-CAC5DD3ECA41">
+        <File Id="fil_89" Source="dist\SoundScapePilot\_internal\pydantic-2.14.1.dist-info\WHEEL" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_90" Directory="DIR__internal_pydantic_2_14_1_dist_info_licenses" Guid="39A49446-3110-4C7B-9A52-13E8F9F0A99A">
+        <File Id="fil_90" Source="dist\SoundScapePilot\_internal\pydantic-2.14.1.dist-info\licenses\LICENSE" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_91" Directory="DIR__internal_pydantic_core" Guid="460691EC-C258-4BE1-8DDD-240E78442B9F">
+        <File Id="fil_91" Source="dist\SoundScapePilot\_internal\pydantic_core\_pydantic_core.cp314-win_amd64.pyd" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_92" Directory="DIR__internal_setuptools__vendor_jaraco_text" Guid="8CB4DF06-4C53-4FE1-BBAB-1A375377A020">
+        <File Id="fil_92" Source="dist\SoundScapePilot\_internal\setuptools\_vendor\jaraco\text\Lorem ipsum.txt" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_93" Directory="DIR__internal_static" Guid="EF353194-9781-4F0D-980E-7CA7936EE7C1">
+        <File Id="fil_93" Source="dist\SoundScapePilot\_internal\static\index.html" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_94" Directory="DIR__internal_web" Guid="08C563CB-458D-4C7E-805F-E15BB57B6B3F">
+        <File Id="fil_94" Source="dist\SoundScapePilot\_internal\web\next-env.d.ts" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_95" Directory="DIR__internal_web" Guid="75CF4F76-70A3-4F9A-93D0-FC1DF73AB784">
+        <File Id="fil_95" Source="dist\SoundScapePilot\_internal\web\package-lock.json" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_96" Directory="DIR__internal_web" Guid="0025AEE5-70DF-4E30-BDF4-96EF33D4C770">
+        <File Id="fil_96" Source="dist\SoundScapePilot\_internal\web\package.json" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_97" Directory="DIR__internal_web_app" Guid="DB36B7B0-B661-4E2B-918C-DF79025C6E33">
+        <File Id="fil_97" Source="dist\SoundScapePilot\_internal\web\app\layout.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_98" Directory="DIR__internal_web_app" Guid="41979307-AE81-476D-977C-F5652849D3AB">
+        <File Id="fil_98" Source="dist\SoundScapePilot\_internal\web\app\page.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_99" Directory="DIR__internal_web_app_login" Guid="9A9FB8ED-0B3D-499D-9CCE-35BFBD0D1C0A">
+        <File Id="fil_99" Source="dist\SoundScapePilot\_internal\web\app\login\page.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_100" Directory="DIR__internal_web_app_marketing" Guid="FCBE21A7-92B3-412A-A7DB-F09A6ACA909B">
+        <File Id="fil_100" Source="dist\SoundScapePilot\_internal\web\app\marketing\page.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+      <Component Id="cmp_101" Directory="DIR__internal_web_app_mercantile" Guid="520FB403-3C29-42F4-8393-9208854DDFAB">
+        <File Id="fil_101" Source="dist\SoundScapePilot\_internal\web\app\mercantile\page.tsx" KeyPath="no" />
+        <CreateFolder />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
