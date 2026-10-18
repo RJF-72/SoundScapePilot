@@ -48,7 +48,9 @@ pr_wire = PRWire()
 app = FastAPI(title="SoundScape Pilot", version="1.0.0")
 
 # JWT / owner allowlist
-JWT_SECRET = os.environ.get("JWT_SECRET", "soundscape-pilot-default-secret-change-in-production")
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable must be set (see backend.env.example)")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = int(os.environ.get("JWT_EXPIRE_HOURS", "24"))
 OWNER_EMAILS = {e.strip().lower() for e in os.environ.get("OWNER_EMAILS", "ray@redemptionroadmg.com,keith@redemptionroadmg.com,joni@redemptionroadmg.com,paige@redemptionroadmg.com").split(",") if e.strip()}
