@@ -53,7 +53,12 @@ if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET environment variable must be set (see backend.env.example)")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = int(os.environ.get("JWT_EXPIRE_HOURS", "24"))
-OWNER_EMAILS = {e.strip().lower() for e in os.environ.get("OWNER_EMAILS", "ray@redemptionroadmg.com,keith@redemptionroadmg.com,joni@redemptionroadmg.com,paige@redemptionroadmg.com").split(",") if e.strip()}
+OWNER_EMAILS = {e.strip().lower() for e in os.environ.get("OWNER_EMAILS", "").split(",") if e.strip()}
+if not OWNER_EMAILS:
+    raise RuntimeError("OWNER_EMAILS environment variable must be set (comma-separated owner emails; see backend.env.example)")
+OWNER_MASTER_PASSWORD = os.environ.get("OWNER_MASTER_PASSWORD", "")
+if not OWNER_MASTER_PASSWORD:
+    raise RuntimeError("OWNER_MASTER_PASSWORD environment variable must be set (see backend.env.example)")
 
 security = HTTPBearer()
 
@@ -118,12 +123,10 @@ class LoginRequest(BaseModel):
 @app.post("/api/auth/login")
 async def login(req: LoginRequest, request: Request):
     email = req.email.strip().lower()
-    # In production use a real password hash. For now, env-based master password or per-owner tokens.
-    master = os.environ.get("OWNER_MASTER_PASSWORD", "")
     if email not in OWNER_EMAILS:
         await audit_log(request, "login_failed", {"reason": "not_owner", "email": email})
         return JSONResponse(status_code=401, content={"error": "Not an authorized owner"})
-    if not master or req.password != master:
+    if req.password != OWNER_MASTER_PASSWORD:
         await audit_log(request, "login_failed", {"reason": "bad_password", "email": email})
         return JSONResponse(status_code=401, content={"error": "Invalid credentials"})
     token = create_token(email)
