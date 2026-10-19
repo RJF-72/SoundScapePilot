@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# PyInstaller build trees (rebuild with: PyInstaller SoundScapePilot.spec)
+dist/
+build/
+build_msi/
+
+# WiX intermediates + logs
+*.wixobj
+*.wixpdb
+candle_out.txt
+light_out.txt
+gen_out.txt
+install*.log
+
+# Legacy pre-rebrand scratch (superseded by SoundScapePilot/)
+T7/
