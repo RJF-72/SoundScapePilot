@@ -12,12 +12,22 @@ from typing import List, Dict, Any, Optional
 # Default self-hosted domain for Redemption Road Music Group.
 DEFAULT_DOMAIN = os.getenv("SOUNDSCAPE_MAIL_DOMAIN", "redemptionroadmg.com")
 
-OWNERS = [
-    {"name": "Ray", "email": f"ray@{DEFAULT_DOMAIN}"},
-    {"name": "Joni", "email": f"joni@{DEFAULT_DOMAIN}"},
-    {"name": "Keith", "email": f"keith@{DEFAULT_DOMAIN}"},
-    {"name": "Paige", "email": f"paige@{DEFAULT_DOMAIN}"},
-]
+# Owner emails can be configured via environment variable
+_owner_emails_env = os.getenv("SOUNDSCAPE_OWNER_EMAILS", "")
+if _owner_emails_env:
+    OWNERS = []
+    for email in _owner_emails_env.split(","):
+        email = email.strip().lower()
+        if email:
+            name = email.split("@")[0].capitalize()
+            OWNERS.append({"name": name, "email": email})
+else:
+    OWNERS = [
+        {"name": "Ray", "email": f"ray@{DEFAULT_DOMAIN}"},
+        {"name": "Joni", "email": f"joni@{DEFAULT_DOMAIN}"},
+        {"name": "Keith", "email": f"keith@{DEFAULT_DOMAIN}"},
+        {"name": "Paige", "email": f"paige@{DEFAULT_DOMAIN}"},
+    ]
 
 # Self-hosted default for redemptionroadmg.com
 SELF_HOSTED_DEFAULTS = {

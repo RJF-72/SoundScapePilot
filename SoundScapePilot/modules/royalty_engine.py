@@ -39,8 +39,8 @@ class RightsManager:
 
         song = {
             "id": str(uuid.uuid4())[:12],
-            "isrc": isrc or self._generate_isrc(),
-            "upc": upc or "",
+            "isrc": (isrc or "").strip(),
+            "upc": (upc or "").strip(),
             "title": title,
             "artists": artists,
             "writers": writers,
@@ -56,13 +56,6 @@ class RightsManager:
         }
         db.save_royalty_song(song)
         return song
-
-    def _generate_isrc(self) -> str:
-        country = "US"
-        registrant = "RRM"  # Redemption Road Music
-        year = datetime.now().strftime("%y")
-        code = str(uuid.uuid4().int)[:5]
-        return f"{country}{registrant}{year}{code}"
 
     def calculate_mechanical(self, copies: int, songs_per_copy: int = 1) -> Dict[str, Any]:
         total = copies * songs_per_copy * MECHANICAL_RATE

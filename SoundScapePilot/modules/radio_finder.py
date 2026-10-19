@@ -132,12 +132,18 @@ class RadioFinder:
         self.headers = {"User-Agent": "SoundScapePilot-RadioBot/1.0 (Music Industry Research)"}
 
     def search(self, genre: str, state: str = "", skip_names: set = None) -> List[Dict[str, Any]]:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            return loop.run_until_complete(self.search_async(genre, state, skip_names or set()))
-        finally:
-            loop.close()
+            # Use asyncio.run() which is the recommended way to run async from sync context
+            return asyncio.run(self.search_async(genre, state, skip_names or set()))
+        except RuntimeError as e:
+            # If there's already a running loop (e.g., in a thread), create a new one
+            if "cannot be called from a running event loop" in str(e):
+                loop = asyncio.new_event_loop()
+                try:
+                    return loop.run_until_complete(self.search_async(genre, state, skip_names or set()))
+                finally:
+                    loop.close()
+            raise
 
     async def search_async(self, genre: str, state: str = "", skip_names: set = None) -> List[Dict[str, Any]]:
         results = []

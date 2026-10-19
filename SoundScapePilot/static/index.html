@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="api-base" content="/api">  <!-- Override in production deployment -->
     <title>SOUNDSCAPE PILOT</title>
     <link rel="icon" type="image/x-icon" href="/static/logo.ico">
     <style>
@@ -78,6 +79,8 @@
         .input:focus { border-color: var(--accent-cyan); }
         .input::placeholder { color: var(--text-muted); }
         .input-mono { font-family: var(--font-mono); }
+        select.input option { background: #0a0f1e; color: var(--text-primary); }
+        .venue-check { margin-top: 3px; accent-color: var(--accent-cyan); cursor: pointer; }
 
         .panel { display: flex; flex-direction: column; min-height: 0; }
         .panel-header {
@@ -407,13 +410,13 @@
                 <div class="stat-card" onclick="showModule('catalog')">
                     <div class="card-top"><div class="card-icon cyan"><svg class="icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div><span class="badge badge-cyan"><span class="status-dot active"></span> Active</span></div>
                     <div class="card-name">Catalog Manager</div>
-                    <div class="card-desc">ISRC · UPC · Stems · Masters</div>
+                    <div class="card-desc">Splits · Stems · Masters</div>
                     <div class="card-val" id="dashCatalogCount">0 tracks</div>
                 </div>
                 <div class="stat-card" onclick="showModule('distribution')">
                     <div class="card-top"><div class="card-icon magenta"><svg class="icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><span class="badge badge-magenta"><span class="status-dot active"></span> Pipeline</span></div>
                     <div class="card-name">Distribution</div>
-                    <div class="card-desc">6 distributor integrations</div>
+                    <div class="card-desc">Distributor comparison tool</div>
                     <div class="card-val">Ready</div>
                 </div>
                 <div class="stat-card" onclick="showModule('sync')">
@@ -518,11 +521,30 @@
             <div class="mod-header">
                 <div>
                     <div class="module-title">Autonomous <span>Booking Agent</span></div>
-                    <div class="module-subtitle">Finds real venues in a state. Curated high-value targets + public directory search.</div>
+                    <div class="module-subtitle">All live-music venues — small, medium, large, and churches. Curated + Wikipedia + OpenStreetMap + (optional) Google Places.</div>
                 </div>
                 <div class="search-row">
-                    <input class="input" id="bookState" placeholder="State" value="Texas" style="width:100px">
-                    <input class="input" id="bookGenre" placeholder="Genre" value="" style="width:110px">
+                    <input class="input" id="bookQuery" placeholder="e.g. small country venues near Abilene TX" style="width:250px">
+                    <input class="input" id="bookState" placeholder="State" value="Texas" style="width:90px">
+                    <input class="input" id="bookGenre" placeholder="Genre" value="" style="width:90px">
+                    <select class="input" id="bookSize" style="width:120px" title="Filter by size (applied after search)">
+                        <option value="all">All sizes</option>
+                        <option value="small">Small (&lt;500)</option>
+                        <option value="medium">Medium (500-1500)</option>
+                        <option value="large">Large (1500+)</option>
+                    </select>
+                    <select class="input" id="bookType" style="width:120px" title="Filter by type (applied after search)">
+                        <option value="all">All types</option>
+                        <option value="bar">Bar</option>
+                        <option value="church">Church</option>
+                        <option value="theater">Theater</option>
+                        <option value="outdoor">Outdoor</option>
+                        <option value="club">Club</option>
+                        <option value="cafe">Cafe</option>
+                        <option value="civic">Civic</option>
+                        <option value="listening_room">Listening Room</option>
+                        <option value="other">Other</option>
+                    </select>
                     <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);cursor:pointer"><input type="checkbox" id="bookIncludeChurches" checked> Churches</label>
                     <button class="btn" id="bookSearchBtn" onclick="searchBooking()">Find Venues</button>
                     <button class="btn btn-cyan btn-sm" id="bookDispatchBtn" onclick="dispatchBooking()" disabled>Send EPKs</button>
@@ -534,8 +556,14 @@
                     <div class="panel-body"><div class="term-log" id="term-booking"></div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header" style="color:var(--accent-gold)">Venue Pipeline <span style="color:var(--accent-green);font-size:9px">LIVE DB</span></div>
-                    <div class="panel-body" id="booking-results"><div style="color:var(--text-muted);text-align:center;margin-top:40px">Enter a state and click Find Venues.</div></div>
+                    <div class="panel-header" style="color:var(--accent-gold)">Venue Pipeline <span style="color:var(--accent-green);font-size:9px">LIVE DB</span>
+                        <span style="display:flex;gap:6px;align-items:center;margin-left:auto">
+                            <span id="bookSelCount" style="font-size:10px;color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
+                            <button class="btn btn-sm" id="bookSelectAllBtn" onclick="selectAllVenues()" disabled>Select All</button>
+                            <button class="btn btn-sm" id="bookClearSelBtn" onclick="clearVenueSelection()" disabled>Clear</button>
+                        </span>
+                    </div>
+                    <div class="panel-body" id="booking-results"><div style="color:var(--text-muted);text-align:center;margin-top:40px">Enter a query (e.g. "small country venues near Abilene TX") or a state, then click Find Venues.</div></div>
                 </div>
             </div>
         </div>
@@ -728,6 +756,7 @@
                     <div class="panel-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;">
                         <input class="input" id="roySongTitle" placeholder="Title" style="grid-column:span 2">
                         <input class="input" id="roySongArtist" placeholder="Artist" style="grid-column:span 2">
+                        <input class="input" id="roySongIsrc" placeholder="Your ISRC (optional)" style="grid-column:span 2">
                         <input class="input" id="roySongGenre" placeholder="Genre">
                         <input class="input" id="roySongDuration" placeholder="Duration (sec)" type="number">
                         <button class="btn btn-cyan" onclick="registerSong()" style="grid-column:span 2">Register Song</button>
@@ -791,6 +820,7 @@
                 <div class="panel-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;max-width:500px">
                     <input class="input" id="catTitle" placeholder="Release Title" style="grid-column:span 2">
                     <input class="input" id="catArtist" placeholder="Artist" style="grid-column:span 2">
+                    <input class="input" id="catUpc" placeholder="Your UPC (optional)" style="grid-column:span 2">
                     <input class="input" id="catGenre" placeholder="Genre">
                     <input class="input" id="catReleaseDate" placeholder="Release Date (YYYY-MM-DD)" value="2026-06-16">
                     <button class="btn btn-cyan btn-sm" onclick="createRelease()" style="grid-column:span 2">Create Release</button>
@@ -897,7 +927,7 @@
                 <div class="panel-header" style="color:var(--accent-gold)">Revenue Projector</div>
                 <div class="panel-body" id="revenueProjector" style="padding:12px">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;max-width:600px">
-                        <div><label style="font-size:10px;color:var(--text-muted)">Distro Only</label><input class="input" id="rpDistro" type="number" value="0" min="0"></div>
+                        <div><label style="font-size:10px;color:var(--text-muted)">Artist Starter</label><input class="input" id="rpDistro" type="number" value="0" min="0"></div>
                         <div><label style="font-size:10px;color:var(--text-muted)">Artist Pro</label><input class="input" id="rpPro" type="number" value="0" min="0"></div>
                         <div><label style="font-size:10px;color:var(--text-muted)">Label Launchpad</label><input class="input" id="rpLabel" type="number" value="0" min="0"></div>
                         <div><label style="font-size:10px;color:var(--text-muted)">Enterprise</label><input class="input" id="rpEnterprise" type="number" value="0" min="0"></div>
@@ -948,7 +978,15 @@
 </div>
 
 <script>
-    const API = window.location.protocol.startsWith('http') ? window.location.origin : 'http://127.0.0.1:8765';
+    // Determine API base URL
+    // Priority: 1. Meta tag, 2. Same origin if http/https, 3. Localhost default
+    function getApiBase() {
+        const meta = document.querySelector('meta[name="api-base"]');
+        if (meta && meta.content) return meta.content;
+        if (window.location.protocol.startsWith('http')) return window.location.origin;
+        return 'http://127.0.0.1:8765';
+    }
+    const API = getApiBase();
 
     const platforms = [
         {name:'DistroKid', url:'https://distrokid.com'},
@@ -1029,6 +1067,11 @@
         el.scrollTop = el.scrollHeight;
     }
 
+    function toggleDetail(id) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
+    }
+
     async function apiPost(path, body) {
         const r = await fetch(API + path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
         if (!r.ok) { const e = await r.text(); throw new Error(e); }
@@ -1073,11 +1116,12 @@
                     if (s.submission_email) meta.push('<span style="color:var(--accent-green)">Email: ' + escapeHtml(s.submission_email) + '</span>');
                     meta.push('<span style="font-size:9px;color:var(--text-muted)">' + escapeHtml(s.location || '') + '</span>');
                     const name = s.name || s.station_name || 'Unknown';
+                    const detailId = 'detail-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
                     div.innerHTML = '<input type="checkbox" class="station-select" data-name="' + escapeHtml(s.station_name || s.name || '') + '" style="flex-shrink:0;margin:0">'
-                        + '<div style="flex:1;cursor:pointer" onclick="if(this.nextSibling&&this.nextSibling.style)this.nextSibling.style.display=this.nextSibling.style.display==\'block\'?\'none\':\'block\'">'
+                        + '<div style="flex:1;cursor:pointer" onclick="toggleDetail(\'' + detailId + '\')">'
                         + '<div class="r-title">' + escapeHtml(name) + '</div>'
                         + '<div class="r-meta">' + meta.join('') + '</div></div>'
-                        + '<div class="sub-detail" style="display:none;font-size:10px;color:var(--text-secondary);padding:6px;background:rgba(0,240,255,0.03);border-radius:4px;margin-top:4px;width:100%">'
+                        + '<div id="' + detailId + '" class="sub-detail" style="display:none;font-size:10px;color:var(--text-secondary);padding:6px;background:rgba(0,240,255,0.03);border-radius:4px;margin-top:4px;width:100%">'
                         + escapeHtml(s.submission_notes || 'No submission info available yet.') + '</div>';
                     div.querySelector('input').onchange = function() {
                         if (this.checked) {
@@ -1328,11 +1372,12 @@
                     // Station list with expandable pitch
                     html += '<div style="padding:4px 8px">';
                     stations.forEach(p => {
-                        html += '<div class="result-item" style="cursor:pointer" onclick="this.nextSibling.style.display=this.nextSibling.style.display==\'block\'?\'none\':\'block\'">';
+                        const detailId = 'pitch-detail-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                        html += '<div class="result-item" style="cursor:pointer" onclick="toggleDetail(\'' + detailId + '\')">';
                         html += '<div class="r-title" style="font-size:11px">' + escapeHtml(p.station || 'Unknown') + ' <span style="font-weight:400;color:var(--text-muted)">' + escapeHtml(p.location || '') + '</span></div>';
                         html += '<div class="r-meta"><span>Score: ' + (p.success_rate || 'N/A') + '</span><span style="color:var(--accent-green)">' + escapeHtml(p.contact || 'No contact') + '</span></div>';
                         html += '</div>';
-                        html += '<div style="display:none;padding:8px 12px;font-size:11px;color:var(--text-secondary);background:rgba(0,240,255,0.02);border-radius:4px;margin:2px 0 6px 0;white-space:pre-wrap;line-height:1.5">' + escapeHtml(p.pitch_body || '') + '</div>';
+                        html += '<div id="' + detailId + '" style="display:none;padding:8px 12px;font-size:11px;color:var(--text-secondary);background:rgba(0,240,255,0.02);border-radius:4px;margin:2px 0 6px 0;white-space:pre-wrap;line-height:1.5">' + escapeHtml(p.pitch_body || '') + '</div>';
                     });
                     html += '</div></div>';
                 }
@@ -1425,9 +1470,10 @@
 
                 // Expandable pitch preview
                 if (p.pitch_body) {
+                    const detailId = 'stream-detail-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
                     html += '<div style="padding:4px 12px 8px">';
-                    html += '<span onclick="this.nextSibling.style.display=this.nextSibling.style.display==\'block\'?\'none\':\'block\'" style="cursor:pointer;font-size:10px;color:var(--text-secondary)">📝 Show Pitch Preview</span>';
-                    html += '<div style="display:none;padding:8px;margin-top:4px;font-size:11px;color:var(--text-secondary);background:rgba(0,240,255,0.02);border-radius:4px;white-space:pre-wrap;line-height:1.5;max-height:200px;overflow-y:auto">' + escapeHtml(p.pitch_body || '') + '</div>';
+                    html += '<span onclick="toggleDetail(\'' + detailId + '\')" style="cursor:pointer;font-size:10px;color:var(--text-secondary)">📝 Show Pitch Preview</span>';
+                    html += '<div id="' + detailId + '" style="display:none;padding:8px;margin-top:4px;font-size:11px;color:var(--text-secondary);background:rgba(0,240,255,0.02);border-radius:4px;white-space:pre-wrap;line-height:1.5;max-height:200px;overflow-y:auto">' + escapeHtml(p.pitch_body || '') + '</div>';
                     html += '</div>';
                 }
                 html += '</div>';
@@ -1442,35 +1488,112 @@
     }
 
     // BOOKING
+    let _bookResults = [];
+
+    function _bookGeo() {
+        return new Promise(resolve => {
+            if (!navigator.geolocation) return resolve(null);
+            navigator.geolocation.getCurrentPosition(
+                p => resolve({lat: p.coords.latitude, lon: p.coords.longitude}),
+                () => resolve(null), {timeout: 5000});
+        });
+    }
+
+    const _BOOK_TYPE_LABELS = {bar:'Bar', church:'Church', theater:'Theater', outdoor:'Outdoor', club:'Club', cafe:'Cafe', civic:'Civic', listening_room:'Listening Room', other:'Venue'};
+
+    function _bookBadge(text, color) {
+        return '<span style="padding:1px 6px;border-radius:8px;font-size:9px;border:1px solid ' + (color || 'var(--border-glass)') + ';color:' + (color || 'var(--text-secondary)') + '">' + escapeHtml(text) + '</span>';
+    }
+
+    function _selectedVenues() {
+        const idxs = Array.from(document.querySelectorAll('.venue-check:checked')).map(c => parseInt(c.dataset.idx, 10));
+        return idxs.map(i => _bookResults[i]).filter(Boolean);
+    }
+
+    function _updateSelCount() {
+        const n = document.querySelectorAll('.venue-check:checked').length;
+        const el = document.getElementById('bookSelCount');
+        if (el) el.textContent = n ? n + ' selected' : '';
+        document.getElementById('bookDispatchBtn').disabled = n === 0;
+    }
+
+    function selectAllVenues() {
+        document.querySelectorAll('.venue-check').forEach(c => c.checked = true);
+        _updateSelCount();
+        log('term-booking', 'log-info', 'Selected all venues.');
+    }
+
+    function clearVenueSelection() {
+        document.querySelectorAll('.venue-check').forEach(c => c.checked = false);
+        _updateSelCount();
+    }
+
     async function searchBooking() {
+        const query = document.getElementById('bookQuery').value.trim();
         const state = document.getElementById('bookState').value.trim();
         const genre = document.getElementById('bookGenre').value.trim();
+        const size = document.getElementById('bookSize').value;
+        const type = document.getElementById('bookType').value;
         const includeChurches = document.getElementById('bookIncludeChurches').checked;
         const btn = document.getElementById('bookSearchBtn');
         btn.disabled = true; btn.textContent = 'Searching...';
         const term = document.getElementById('term-booking');
         term.innerHTML = '';
         log('term-booking', 'log-sys', 'Venue search initiated...');
-        log('term-booking', 'log-info', 'Searching venues in: ' + (state || 'any') + (genre ? ' | Genre: ' + genre : '') + (includeChurches ? ' | Including churches' : ''));
+        log('term-booking', 'log-info', 'Query: ' + (query || '(state/genre only)') + ' | State: ' + (state || 'any') + (size !== 'all' ? ' | Size: ' + size : '') + (type !== 'all' ? ' | Type: ' + type : '') + (includeChurches ? ' | Churches included' : ''));
         try {
-            const data = await apiPost('/api/booking/search', {state, genre, include_churches: includeChurches});
-            log('term-booking', 'log-ok', 'Found ' + data.length + ' venues.');
-            document.getElementById('bookDispatchBtn').disabled = data.length === 0;
+            let lat = null, lon = null;
+            if (/near\s+me/i.test(query)) {
+                log('term-booking', 'log-info', 'Resolving "near me" via device location...');
+                const g = await _bookGeo();
+                if (g) { lat = g.lat; lon = g.lon; log('term-booking', 'log-ok', 'Location: ' + lat.toFixed(3) + ', ' + lon.toFixed(3)); }
+                else { log('term-booking', 'log-err', 'Location unavailable - falling back to state.'); }
+            }
+            const data = await apiPost('/api/booking/search', {query, state, genre, include_churches: includeChurches, size, type, lat, lon});
+            _bookResults = data || [];
+            log('term-booking', 'log-ok', 'Found ' + _bookResults.length + ' venues.');
+            const churches = _bookResults.filter(v => v.venue_type === 'church').length;
+            const sizes = ['small','medium','large'].map(s => _bookResults.filter(v => v.size_class === s).length);
+            log('term-booking', 'log-info', 'Mix: ' + sizes[0] + ' small / ' + sizes[1] + ' medium / ' + sizes[2] + ' large / ' + churches + ' churches.');
+            document.getElementById('bookSelectAllBtn').disabled = _bookResults.length === 0;
+            document.getElementById('bookClearSelBtn').disabled = _bookResults.length === 0;
+            document.getElementById('bookDispatchBtn').disabled = true;
+            document.getElementById('bookSelCount').textContent = '';
             const results = document.getElementById('booking-results');
-            if (!data || data.length === 0) {
+            results.innerHTML = '';
+            if (!_bookResults.length) {
                 results.innerHTML = '<div style="color:var(--text-muted);text-align:center;margin-top:40px">No venues found.</div>';
             } else {
-                results.innerHTML = '<div style="font-size:10px;color:var(--text-muted);padding:6px 0;border-bottom:1px solid var(--border-glass)">' + data.length + ' venues</div>';
-                data.forEach(v => {
+                const summary = document.createElement('div');
+                summary.style.cssText = 'font-size:10px;color:var(--text-muted);padding:6px 0;border-bottom:1px solid var(--border-glass)';
+                summary.textContent = _bookResults.length + ' venues — tick rows (or Select All), then Send EPKs to the selected.';
+                results.appendChild(summary);
+                _bookResults.forEach((v, i) => {
                     const div = document.createElement('div');
                     div.className = 'result-item';
+                    div.style.display = 'flex';
+                    div.style.gap = '10px';
+                    div.style.alignItems = 'flex-start';
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'venue-check';
+                    cb.dataset.idx = i;
+                    cb.onclick = (e) => { e.stopPropagation(); _updateSelCount(); };
+                    const body = document.createElement('div');
+                    body.style.flex = '1';
+                    body.style.minWidth = '0';
                     const meta = [];
-                    if (v.city) meta.push('<span>City: ' + v.city + '</span>');
-                    if (v.genre) meta.push('<span>Genre: ' + v.genre + '</span>');
-                    if (v.contact) meta.push('<span>Contact: ' + v.contact + '</span>');
-                    if (v.source) meta.push('<span style="color:var(--accent-gold)">' + v.source + '</span>');
-                    div.innerHTML = '<div class="r-title">' + escapeHtml(v.name || 'Unknown') + '</div><div class="r-meta">' + meta.join('') + '</div>';
-                    if (v.website) div.onclick = () => openExternal(v.website);
+                    meta.push(_bookBadge(_BOOK_TYPE_LABELS[v.venue_type] || 'Venue', v.venue_type === 'church' ? 'var(--accent-gold)' : 'var(--accent-cyan)'));
+                    if (v.size_class) meta.push(_bookBadge(v.size_class + (v.capacity ? ' · ' + v.capacity + ' cap' : (v.capacity_estimate ? ' · ~est' : ''))));
+                    if (v.city) meta.push('<span>' + escapeHtml(v.city) + (v.state ? ', ' + escapeHtml(v.state) : '') + '</span>');
+                    if (v.address && v.address !== (v.city ? v.city + ', ' + v.state : '')) meta.push('<span>' + escapeHtml(v.address) + '</span>');
+                    if (v.contact) meta.push('<span>' + escapeHtml(v.contact) + '</span>');
+                    if (v.source) meta.push('<span style="color:var(--accent-gold)">' + escapeHtml(v.source) + '</span>');
+                    body.innerHTML = '<div class="r-title">' + escapeHtml(v.name || 'Unknown') + '</div><div class="r-meta">' + meta.join('') + '</div>'
+                        + (v.reason ? '<div style="font-size:10px;color:var(--text-muted);margin-top:3px;line-height:1.4">' + escapeHtml(v.reason) + '</div>' : '');
+                    if (v.website) { body.style.cursor = 'pointer'; body.onclick = () => openExternal(v.website); }
+                    div.appendChild(cb);
+                    div.appendChild(body);
                     results.appendChild(div);
                 });
             }
@@ -1482,16 +1605,23 @@
     }
 
     async function dispatchBooking() {
+        const selected = _selectedVenues();
+        if (!selected.length) {
+            log('term-booking', 'log-err', 'No venues selected — tick rows or use Select All first.');
+            return;
+        }
         const btn = document.getElementById('bookDispatchBtn');
         btn.disabled = true; btn.textContent = 'Sending...';
-        log('term-booking', 'log-sys', 'Dispatching EPKs...');
+        log('term-booking', 'log-sys', 'Dispatching EPKs to ' + selected.length + ' selected venues...');
         try {
-            const r = await apiPost('/api/booking/dispatch', {});
+            const payload = selected.map(v => ({name: v.name, city: v.city, state: v.state, contact: v.contact, website: v.website, capacity: v.capacity}));
+            const r = await apiPost('/api/booking/dispatch', {venues: payload});
             log('term-booking', 'log-ok', 'EPKs dispatched: ' + (r.result || 'OK'));
         } catch (e) {
             log('term-booking', 'log-err', 'Dispatch failed: ' + e.message);
         }
-        btn.disabled = false; btn.textContent = 'Send EPKs';
+        _updateSelCount();
+        btn.textContent = 'Send EPKs';
     }
 
     // PR
@@ -1809,10 +1939,11 @@
         try {
             const r = await apiPost('/api/royalty/song/register', {
                 title, artists: [document.getElementById('roySongArtist').value.trim()],
+                isrc: document.getElementById('roySongIsrc').value.trim(),
                 genre: document.getElementById('roySongGenre').value.trim(),
                 duration_sec: parseInt(document.getElementById('roySongDuration').value) || 0,
             });
-            document.getElementById('royResults').innerHTML = '<div class="glass-card" style="padding:12px;margin-top:8px"><div style="color:var(--accent-green);font-weight:600">Song Registered</div><div style="font-size:11px;color:var(--text-secondary);margin-top:4px">ISRC: ' + r.isrc + '<br>ID: ' + r.id + '<br>Title: ' + escapeHtml(r.title) + '</div></div>';
+            document.getElementById('royResults').innerHTML = '<div class="glass-card" style="padding:12px;margin-top:8px"><div style="color:var(--accent-green);font-weight:600">Song Registered</div><div style="font-size:11px;color:var(--text-secondary);margin-top:4px">ISRC: ' + escapeHtml(r.isrc || 'none provided') + '<br>ID: ' + r.id + '<br>Title: ' + escapeHtml(r.title) + '</div></div>';
         } catch(e) { alert('Error: ' + e.message); }
     }
     async function calcPerformance() {
@@ -1851,11 +1982,12 @@
         try {
             const r = await apiPost('/api/catalog/release/create', {
                 title, artist: document.getElementById('catArtist').value.trim(),
+                upc: document.getElementById('catUpc').value.trim(),
                 genre: document.getElementById('catGenre').value.trim(),
                 release_date: document.getElementById('catReleaseDate').value.trim(),
             });
             loadCatalogSummary();
-            document.getElementById('catBody').innerHTML = '<div class="glass-card" style="padding:12px"><div style="color:var(--accent-green);font-weight:600">Release Created</div><div style="font-size:11px;color:var(--text-secondary);margin-top:4px">ID: ' + r.id + '<br>Catalog #: ' + r.catalog_number + '<br>UPC: ' + r.upc + '</div></div>';
+            document.getElementById('catBody').innerHTML = '<div class="glass-card" style="padding:12px"><div style="color:var(--accent-green);font-weight:600">Release Created</div><div style="font-size:11px;color:var(--text-secondary);margin-top:4px">ID: ' + r.id + '<br>Catalog #: ' + r.catalog_number + '<br>UPC: ' + escapeHtml(r.upc || 'none provided') + '</div></div>';
             document.getElementById('catTitle').value = '';
             document.getElementById('catArtist').value = '';
             document.getElementById('catGenre').value = '';
@@ -1998,7 +2130,7 @@
             plans.innerHTML = '';
             Object.keys(d).forEach(key => {
                 const t = d[key];
-                const colors = {distribution_only:'var(--accent-cyan)', artist_pro:'var(--accent-green)', label_launchpad:'var(--accent-gold)', enterprise:'var(--accent-magenta)'};
+                const colors = {artist_starter:'var(--accent-cyan)', artist_pro:'var(--accent-green)', label_launchpad:'var(--accent-gold)', enterprise:'var(--accent-magenta)'};
                 const div = document.createElement('div');
                 div.className = 'glass-card';
                 div.style.cssText = 'flex:1;min-width:220px;padding:14px;cursor:pointer';
@@ -2055,7 +2187,7 @@
         } catch(e) { extra.innerHTML = '<div style="color:var(--accent-magenta);padding:20px;text-align:center">Error: ' + escapeHtml(e.message) + '</div>'; }
     }
     async function projectRevenue() {
-        const body = {distro_only:parseInt(document.getElementById('rpDistro').value)||0, artist_pro:parseInt(document.getElementById('rpPro').value)||0, label_launchpad:parseInt(document.getElementById('rpLabel').value)||0, enterprise:parseInt(document.getElementById('rpEnterprise').value)||0, ai_songs:parseInt(document.getElementById('rpAISongs').value)||0, sync_packs:parseInt(document.getElementById('rpSync').value)||0, radio_boosts:parseInt(document.getElementById('rpRadio').value)||0, streaming_blitzes:parseInt(document.getElementById('rpStream').value)||0, tour_plans:0};
+        const body = {artist_starter:parseInt(document.getElementById('rpDistro').value)||0, artist_pro:parseInt(document.getElementById('rpPro').value)||0, label_launchpad:parseInt(document.getElementById('rpLabel').value)||0, enterprise:parseInt(document.getElementById('rpEnterprise').value)||0, ai_songs:parseInt(document.getElementById('rpAISongs').value)||0, sync_packs:parseInt(document.getElementById('rpSync').value)||0, radio_boosts:parseInt(document.getElementById('rpRadio').value)||0, streaming_blitzes:parseInt(document.getElementById('rpStream').value)||0, tour_plans:0};
         try {
             const r = await apiPost('/api/pricing/project-revenue', body);
             document.getElementById('revenueResult').innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +

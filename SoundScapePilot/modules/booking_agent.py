@@ -1,8 +1,7 @@
+import os
 import re
 import time
 import httpx
-import asyncio
-import json
 from typing import List, Dict, Any, Set, Optional
 
 from modules.mailer import DEFAULT_DOMAIN
@@ -12,9 +11,14 @@ WIKI_API = "https://en.wikipedia.org/w/api.php"
 WIKI_BASE = "https://en.wikipedia.org"
 OVER_PASS_APIS = [
     "https://overpass-api.de/api/interpreter",
+    "https://lz4.overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.openstreetmap.fr/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
 ]
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
+GOOGLE_PLACES_URL = "https://places.googleapis.com/v1/places:searchText"
 
 _STATE_ABBR = {
     "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA",
@@ -28,6 +32,39 @@ _STATE_ABBR = {
     "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT", "Vermont": "VT",
     "Virginia": "VA", "Washington": "WA", "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY",
 }
+
+# Query keywords that mark a church-seeking intent. Any hit runs church
+# discovery (all sources) and boosts tagged churches to the top of results.
+CHURCH_KEYWORDS = [
+    "church", "churches", "worship", "gospel", "christian", "catholic", "baptist",
+    "methodist", "lutheran", "presbyterian", "episcopal", "pentecostal",
+    "assembly of god", "non-denominational", "nondenominational", "cathedral",
+    "chapel", "ministry", "ministries", "sanctuary", "revival", "revivals",
+    "megachurch", "tabernacle", "nazarene",
+]
+
+CHURCH_NAME_RE = re.compile(
+    r"\b(church|churches|chapel|cathedral|ministry|ministries|tabernacle|baptist|"
+    r"methodist|lutheran|presbyterian|episcopal|pentecostal|catholic|nazarene|"
+    r"christian|christ|savior|saviour|fellowship|worship|kingdom hall|"
+    r"assembly of god|non-denominational|word of god|full gospel)\b", re.I)
+CHURCH_NAME_EXCLUDE_RE = re.compile(
+    r"\b(theatre|theater|ballroom|nightclub|amphitheater|amphitheatre|saloon|"
+    r"lounge|pub|bar|live|studio|restaurant|grill|cinema)\b", re.I)
+OUTDOOR_NAME_RE = re.compile(
+    r"\b(amphitheater|amphitheatre|outdoor|bandstand|fairground|fair grounds|"
+    r"open air|open-air|pavilion)\b", re.I)
+LISTENING_NAME_RE = re.compile(r"\blistening\b", re.I)
+ARENA_NAME_RE = re.compile(r"\b(arena|stadium|coliseum|colosseum)\b", re.I)
+THEATER_NAME_RE = re.compile(
+    r"\b(theatre|theater|playhouse|opera|auditorium|performing arts|cinema)\b", re.I)
+CLUB_NAME_RE = re.compile(r"\b(nightclub|night club|dance hall|dancehall|club)\b", re.I)
+CAFE_NAME_RE = re.compile(r"\b(cafe|caf\u00e9|coffee)\b", re.I)
+BAR_NAME_RE = re.compile(
+    r"\b(bar|pub|saloon|lounge|tavern|honky|brew|biergarten|beer garden|icehouse|roadhouse)\b", re.I)
+CIVIC_NAME_RE = re.compile(
+    r"\b(civic|community|grange|vfw|legion|elks|expo|convention|exhibition|"
+    r"fraternal|events center|event center|center|centre)\b", re.I)
 
 # Genre -> Wikipedia categories (per-state + genre-specific)
 GENRE_CATEGORIES = {
@@ -47,6 +84,8 @@ GENRE_CATEGORIES = {
     "blues": ["Category:Blues clubs", "Category:Blues venues", "Category:Blues festivals"],
     "jazz": ["Category:Jazz clubs", "Category:Jazz venues", "Category:Jazz festivals"],
     "country": ["Category:Country music venues", "Category:Honky-tonks", "Category:Country festivals"],
+    "honky-tonk": ["Category:Honky-tonks", "Category:Country music venues"],
+    "honky tonk": ["Category:Honky-tonks", "Category:Country music venues"],
     "folk": ["Category:Folk music venues", "Category:Folk festivals"],
     "americana": ["Category:Folk music venues"],
     "bluegrass": ["Category:Bluegrass festivals"],
@@ -105,6 +144,8 @@ GENRE_LIST_PAGES = {
 }
 
 # Curated high-value venues so the agent ALWAYS works even if the network is down.
+# NOTE: capacity is best-effort seed data (0 = unknown). All sizes are represented;
+# there is deliberately NO minimum capacity or popularity bar anywhere in this file.
 CURATED_VENUES: Dict[str, List[Dict[str, Any]]] = {
     "Texas": [
         {"name": "Austin City Limits Live at The Moody Theater", "city": "Austin", "capacity": 2715, "contact": "booking@acllive.com", "website": "https://acllive.com"},
@@ -122,6 +163,18 @@ CURATED_VENUES: Dict[str, List[Dict[str, Any]]] = {
         {"name": "Green Hall", "city": "Dallas", "capacity": 500, "contact": "booking@greenhallaustin.com", "website": "https://greenhallaustin.com"},
         {"name": "Trophy Club", "city": "Houston", "capacity": 400, "contact": "booking@trophyclubhtx.com", "website": "https://trophyclubhtx.com"},
         {"name": "Cheetahs Austin", "city": "Austin", "capacity": 350, "contact": "booking@cheetahsnightclub.com", "website": "https://cheetahsnightclub.com"},
+        {"name": "Gruene Hall", "city": "New Braunfels", "capacity": 600, "contact": "booking@gruenehall.com", "website": "https://gruenehall.com"},
+        {"name": "Luckenbach Dance Hall", "city": "Luckenbach", "capacity": 400, "contact": "booking@luckenbach.com", "website": "https://luckenbach.com"},
+        {"name": "John T. Floore's Country Store", "city": "Helotes", "capacity": 1000, "contact": "booking@floores.com", "website": "https://floores.com"},
+        {"name": "Coupland Dance Hall", "city": "Coupland", "capacity": 1000, "contact": "booking@couplanddancehall.com", "website": ""},
+        {"name": "The Bugle Boy", "city": "La Grange", "capacity": 185, "contact": "booking@thebugleboy.com", "website": "https://thebugleboy.com"},
+        {"name": "The Paramount Theatre", "city": "Abilene", "capacity": 450, "contact": "", "website": ""},
+        {"name": "Abilene Civic Center", "city": "Abilene", "capacity": 2300, "contact": "", "website": ""},
+        {"name": "Taylor County Expo Center", "city": "Abilene", "capacity": 0, "contact": "", "website": ""},
+        {"name": "The Church at Quail Hollow", "city": "Abilene", "capacity": 0, "venue_type": "church", "contact": "", "website": ""},
+        {"name": "Southern Hills Church of Christ", "city": "Abilene", "capacity": 0, "venue_type": "church", "contact": "", "website": ""},
+        {"name": "First Baptist Church of Abilene", "city": "Abilene", "capacity": 0, "venue_type": "church", "contact": "", "website": ""},
+        {"name": "St. Patrick Cathedral", "city": "Abilene", "capacity": 0, "venue_type": "church", "contact": "", "website": ""},
     ],
     "California": [
         {"name": "The Forum", "city": "Inglewood", "capacity": 17500, "contact": "booking@theforum.com", "website": "https://theforum.com"},
@@ -281,15 +334,51 @@ US_STATES = {
     "wisconsin": "WI", "wyoming": "WY", "district of columbia": "DC"
 }
 
+# Uppercase abbreviations only (TX) — case-sensitive so "near me"/"in"/"or"
+# never match ME/IN/OR. Full state names stay case-insensitive.
+_ABBR_TOKEN_RE = re.compile(
+    r"\b(" + "|".join(re.escape(a) for a in sorted(_STATE_ABBR.values(), key=len, reverse=True)) + r")\.?\b")
+_STATE_NAME_RE = re.compile(
+    r"\b(" + "|".join(re.escape(n) for n in sorted(US_STATES.keys(), key=len, reverse=True)) + r")\.?\b", re.I)
+
+_LOC_RE = re.compile(r"\b(?:near|around|in|located in)\s+([^,.;!?]+)", re.I)
+
+_CAP_EXTRACT_RE = re.compile(
+    r"(?:seats|seating|capacity|holds|seat(?:s|ed)?\s+(?:about|approximately|around)?)"
+    r"[^\d]{0,15}(\d[\d,]{1,7})", re.I)
+_CAP_ALT_RE = re.compile(r"\b(\d[\d,]{1,7})\s*[- ]?(?:seat(?:ed)?|capacity)", re.I)
+
+# OSM amenity/leisure tag -> venue_type
+_OSM_TYPE_MAP = {
+    "bar": "bar", "pub": "bar", "biergarten": "bar",
+    "nightclub": "club",
+    "theatre": "theater", "theater": "theater",
+    "arts_centre": "civic", "arts_center": "civic",
+    "community_centre": "civic", "community_center": "civic",
+    "exhibition_centre": "civic", "social_centre": "civic",
+    "event_venue": "other",
+    "cafe": "cafe",
+    "amphitheatre": "outdoor", "amphitheater": "outdoor", "fairground": "outdoor",
+    "casino": "other",
+    "place_of_worship": "church",
+}
+
 
 class BookingAgent:
     def __init__(self):
         self._last_req = 0.0
+        self._genre = "live music"
         self.client = httpx.Client(timeout=12.0, headers={
             "User-Agent": "SoundScapePilot-BookingBot/1.0 (Music Industry Research)",
             "Accept-Language": "en-US,en;q=0.9"
         }, follow_redirects=True)
+        self._osm_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._geo_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+        self._gplaces_cache: Dict[str, List[Dict[str, Any]]] = {}
 
+    # ------------------------------------------------------------------ #
+    # HTTP helpers
+    # ------------------------------------------------------------------ #
     def _rate_limit(self):
         elapsed = time.time() - self._last_req
         if elapsed < 0.25:
@@ -323,129 +412,403 @@ class BookingAgent:
             domain = "venue"
         return f"booking@{domain}.com"
 
-    _osm_cache: Dict[str, List[Dict[str, Any]]] = {}
+    # ------------------------------------------------------------------ #
+    # Query parsing / geocoding
+    # ------------------------------------------------------------------ #
+    def _normalize_state(self, state_key: str) -> str:
+        key = (state_key or "").strip().rstrip(".").strip()
+        if not key:
+            return ""
+        for full, abbr in US_STATES.items():
+            if key.lower() == full or key.upper() == abbr or key.lower() == abbr.lower():
+                return full.title()
+        return key.title()
 
-    def _search_osm_churches(self, full_state: str) -> List[Dict[str, Any]]:
-        """Query OpenStreetMap Overpass API for Christian churches in a state.
-        Tries multiple endpoints, caches results per state."""
-        cache_key = f"osm_churches_{full_state.lower()}"
-        if cache_key in self._osm_cache:
-            return list(self._osm_cache[cache_key])
+    def _find_state(self, text: str):
+        """Return (full_state, span) for an uppercase abbrev (TX) or any-case
+        full name (texas). Deliberately ignores lowercase abbreviations so
+        'near me' / 'venues in X' never resolve to ME / IN."""
+        m = _ABBR_TOKEN_RE.search(text)
+        if m:
+            return self._normalize_state(m.group(1)), m.span()
+        m = _STATE_NAME_RE.search(text)
+        if m:
+            return self._normalize_state(m.group(1)), m.span()
+        return "", None
 
-        abbr = _STATE_ABBR.get(full_state.title(), "")
-        if not abbr:
-            return []
-        # Overpass QL: find Christian places of worship in the state (node & way)
-        overpass_query = f'[out:json][timeout:45];area["name"="{full_state}"]["boundary"="administrative"]["admin_level"=4]->.search;(node(area.search)["amenity"="place_of_worship"]["religion"="christian"];way(area.search)["amenity"="place_of_worship"]["religion"="christian"];);out center 300;'
+    def _parse_query(self, query: str) -> Dict[str, Any]:
+        """Extract location, church/country intent, and size bias from free text."""
+        out = {"city": "", "state": "", "near_me": False,
+               "church_intent": False, "country_intent": False, "size_bias": ""}
+        text = (query or "").strip()
+        if not text:
+            return out
+        low = text.lower()
+        if any(k in low for k in CHURCH_KEYWORDS):
+            out["church_intent"] = True
+        if "country" in low:
+            out["country_intent"] = True
+        if any(w in low for w in ("small", "intimate", "dive", "cozy")):
+            out["size_bias"] = "small"
+        elif any(w in low for w in ("large", "big", "arena", "stadium")):
+            out["size_bias"] = "large"
 
+        m = _LOC_RE.search(text)
+        loc = ""
+        if m:
+            loc = m.group(1).strip()
+        else:
+            m2 = re.search(r"([A-Za-z][A-Za-z.'\- ]+?)\s*(" + "|".join(
+                re.escape(a) for a in sorted(_STATE_ABBR.values(), key=len, reverse=True)
+            ) + r")\s*$", text)
+            if m2:
+                loc = (m2.group(1) + " " + m2.group(2)).strip()
+
+        if loc:
+            low_loc = loc.lower().strip().rstrip(".")
+            if low_loc in ("me", "my location", "here"):
+                out["near_me"] = True
+            else:
+                st, span = self._find_state(loc)
+                if st:
+                    out["state"] = st
+                    loc = loc[:span[0]]
+                else:
+                    # Lowercase trailing abbrev, e.g. "abilene tx"
+                    m3 = re.search(r"\s+([A-Za-z]{2})\.?\s*$", loc)
+                    if m3 and m3.group(1).upper() in _STATE_ABBR.values():
+                        out["state"] = self._normalize_state(m3.group(1))
+                        loc = loc[:m3.start()]
+                loc = loc.strip().strip(",").strip()
+                for prefix in ("the ", "downtown ", "city of "):
+                    if loc.lower().startswith(prefix):
+                        loc = loc[len(prefix):]
+                loc = re.sub(r"\s+", " ", loc).strip()
+                if loc:
+                    out["city"] = loc
+        if not out["state"]:
+            st, _ = self._find_state(text)
+            out["state"] = st
+        return out
+
+    def _geocode(self, city: str, state: str) -> Optional[Dict[str, Any]]:
+        key = f"{city}|{state}".lower()
+        if key in self._geo_cache:
+            return self._geo_cache[key]
+        if not city:
+            return None
+        q = f"{city}, {state}, USA" if state else f"{city}, USA"
+        try:
+            self._rate_limit()
+            r = self.client.get(NOMINATIM_URL, params={
+                "q": q, "format": "json", "limit": 1}, timeout=10.0)
+            data = r.json() if r.status_code == 200 else []
+            if data:
+                d = data[0]
+                bbox = d.get("boundingbox")
+                out = {
+                    "lat": float(d["lat"]), "lon": float(d["lon"]),
+                    "display_name": d.get("display_name", ""),
+                    "matched_city": (d.get("name") or city),
+                }
+                self._geo_cache[key] = out
+                return out
+        except Exception:
+            pass
+        self._geo_cache[key] = None
+        return None
+
+    def _reverse_geocode(self, lat: float, lon: float) -> Optional[Dict[str, str]]:
+        key = f"rev|{round(lat, 3)}|{round(lon, 3)}"
+        if key in self._geo_cache:
+            return self._geo_cache[key]
+        try:
+            self._rate_limit()
+            r = self.client.get(NOMINATIM_REVERSE_URL, params={
+                "lat": lat, "lon": lon, "format": "json"}, timeout=10.0)
+            data = r.json() if r.status_code == 200 else {}
+            addr = data.get("address") or {}
+            out = {
+                "city": addr.get("city") or addr.get("town") or addr.get("village") or addr.get("hamlet") or "",
+                "state": self._normalize_state(addr.get("state", "")),
+            }
+            self._geo_cache[key] = out
+            return out
+        except Exception:
+            pass
+        self._geo_cache[key] = None
+        return None
+
+    # ------------------------------------------------------------------ #
+    # OpenStreetMap / Overpass — small, medium, outdoor AND church coverage
+    # ------------------------------------------------------------------ #
+    def _overpass_post(self, overpass_ql: str) -> List[Dict[str, Any]]:
         for api_url in OVER_PASS_APIS:
             try:
-                r = self.client.post(api_url, data={"data": overpass_query}, timeout=55.0)
+                r = self.client.post(api_url, data={"data": overpass_ql}, timeout=15.0)
                 if r.status_code != 200:
                     continue
-                data = r.json()
-                elements = data.get("elements", [])
-                seen_names = set()
-                results = []
-                for el in elements:
-                    name = (el.get("tags") or {}).get("name", "").strip()
-                    if not name or name.lower() in seen_names:
-                        continue
-                    seen_names.add(name.lower())
-                    tags = el.get("tags") or {}
-                    city = (tags.get("addr:city", "") or tags.get("addr:suburb", "") or
-                            tags.get("name:city", "")).strip()
-                    if not city:
-                        city_match = re.search(r'(?:,\s*|in\s+|\(|–\s*)([A-Z][a-zA-Z\s.]+?)(?:\s*(?:,|\)|$|TX|Texas))', name)
-                        if city_match:
-                            city = city_match.group(1).strip()
-                    lat = el.get("lat", 0) or (el.get("center") or {}).get("lat", 0)
-                    lon = el.get("lon", 0) or (el.get("center") or {}).get("lon", 0)
-                    results.append({
-                        "name": name,
-                        "city": city,
-                        "state": full_state,
-                        "capacity": 0,
-                        "contact": self._contact_from_name(name),
-                        "website": tags.get("website", "") or tags.get("contact:website", ""),
-                        "source": "OpenStreetMap",
-                        "latitude": lat,
-                        "longitude": lon,
-                    })
-                if results:
-                    self._osm_cache[cache_key] = list(results)
-                    return results
+                return r.json().get("elements", [])
             except Exception:
                 continue
         return []
 
-    def search_venues(self, state: str, genre: str = "live music") -> List[Dict[str, Any]]:
-        self._genre = (genre or "live music").lower()
-        state_key = state.strip()
-        full_state = None
-        for full, abbr in US_STATES.items():
-            if state_key.lower() == full or state_key.upper() == abbr or state_key.lower() == abbr.lower():
-                full_state = full.title()
-                break
-        if not full_state:
-            full_state = state_key.title()
+    def _build_overpass_query(self, lat: Optional[float], lon: Optional[float],
+                              full_state: str, church_focus: bool,
+                              include_cafe: bool = True) -> str:
+        venue_types = ("bar|pub|music_venue|nightclub|theatre|theater|arts_centre|"
+                       "community_centre|community_center|event_venue|amphitheatre|"
+                       "amphitheater|biergarten|casino|fairground|exhibition_centre|social_centre")
+        if include_cafe:
+            venue_types += "|cafe"
+        if lat and lon:
+            scope = f"around:25000,{lat:.5f},{lon:.5f}"
+            area_part = ""
+            vn, vw = f"node({scope})", f"way({scope})"
+            limit = " 800"
+        else:
+            area_part = f'area["name"="{full_state}"]["boundary"="administrative"]["admin_level"=4]->.a;'
+            vn, vw = "node(area.a)", "way(area.a)"
+            limit = " 500"
+        parts = [
+            f'{vn}["amenity"~"^({venue_types})$"]["name"];',
+            f'{vw}["amenity"~"^({venue_types})$"]["name"];',
+            f'{vn}[leisure=bandstand]["name"];',
+            f'{vw}[leisure=bandstand]["name"];',
+        ]
+        if church_focus:
+            parts += [
+                f'{vn}["amenity"="place_of_worship"]["religion"="christian"]["name"];',
+                f'{vw}["amenity"="place_of_worship"]["religion"="christian"]["name"];',
+            ]
+        return f'[out:json][timeout:35];{area_part}({" ".join(parts)});out center tags{limit};'
 
-        # 1. Always include curated data in the library.
-        curated = list(CURATED_VENUES.get(full_state, []))
+    def _osm_element_to_venue(self, el: Dict[str, Any], full_state: str,
+                              target_city: str) -> Optional[Dict[str, Any]]:
+        tags = el.get("tags") or {}
+        name = (tags.get("name") or "").strip()
+        if not name:
+            return None
+        amenity = tags.get("amenity", "")
+        leisure = tags.get("leisure", "")
+        if amenity == "place_of_worship":
+            vt = "church"
+        elif leisure == "bandstand":
+            vt = "outdoor"
+        else:
+            vt = _OSM_TYPE_MAP.get(amenity, "")
+        city = (tags.get("addr:city") or tags.get("addr:suburb") or
+                tags.get("name:city") or target_city or "").strip()
+        street = (tags.get("addr:street") or "").strip()
+        housenumber = (tags.get("addr:housenumber") or "").strip()
+        postcode = (tags.get("addr:postcode") or "").strip()
+        addr_parts = []
+        if housenumber or street:
+            addr_parts.append(f"{housenumber} {street}".strip())
+        if city:
+            addr_parts.append(city)
+        abbr = _STATE_ABBR.get(full_state.title(), "")
+        if abbr:
+            addr_parts.append(abbr)
+        if postcode:
+            addr_parts.append(postcode)
+        address = ", ".join(addr_parts)
+        cap = 0
+        raw_cap = (tags.get("capacity") or "").strip()
+        if raw_cap.isdigit():
+            cap = int(raw_cap)
+        lat = el.get("lat", 0) or (el.get("center") or {}).get("lat", 0)
+        lon = el.get("lon", 0) or (el.get("center") or {}).get("lon", 0)
+        reason_bits = []
+        if vt == "church":
+            denom = tags.get("denomination", "").strip()
+            reason_bits.append(
+                f"OpenStreetMap: Christian place of worship{f' ({denom})' if denom else ''} hosting services/music")
+        else:
+            reason_bits.append(
+                f"OpenStreetMap: {amenity or leisure or 'venue'} listing — small/medium friendly local venue")
+        if cap:
+            reason_bits.append(f"tagged capacity ~{cap}")
+        return {
+            "name": name, "city": city, "state": full_state,
+            "address": address, "capacity": cap,
+            "capacity_estimate": not cap,
+            "website": tags.get("website", "") or tags.get("contact:website", ""),
+            "phone": tags.get("phone", "") or tags.get("contact:phone", ""),
+            "source": "OpenStreetMap",
+            "venue_type": vt or None,
+            "latitude": lat, "longitude": lon,
+            "reason": " · ".join(reason_bits),
+        }
+
+    def _search_osm(self, lat: Optional[float], lon: Optional[float],
+                    full_state: str, target_city: str,
+                    church_focus: bool) -> List[Dict[str, Any]]:
+        cache_key = (f"osm_{full_state.lower()}|{target_city.lower()}|{bool(church_focus)}"
+                     f"|{round(lat or 0, 2)}|{round(lon or 0, 2)}")
+        if cache_key in self._osm_cache:
+            return list(self._osm_cache[cache_key])
+        ql = self._build_overpass_query(lat, lon, full_state, church_focus,
+                                        include_cafe=bool(lat and lon))
+        elements = self._overpass_post(ql)
         results: List[Dict[str, Any]] = []
-        for v in curated:
-            v.setdefault("source", "SoundScape Pilot Curated")
-            v.setdefault("state", full_state)
-            results.append(dict(v))
-
-        # 2. Always try online discovery too.
-        network_results: List[Dict[str, Any]] = []
-        try:
-            network_results = self._search_wikipedia_venues(full_state)
-        except Exception:
-            pass
-        results.extend(network_results)
-
-        # 2b. For Christian/gospel, also search OpenStreetMap for churches (single query, thousands of results)
-        is_christian = any(w in self._genre for w in ["christian", "church", "gospel", "religious", "worship", "faith", "spiritual"])
-        if is_christian:
-            try:
-                osm_results = self._search_osm_churches(full_state)
-                results.extend(osm_results)
-            except Exception:
-                pass
-
-        # 3. Dedup — keep last occurrence so online overrides curated on name collision.
         seen: Set[str] = set()
-        final: List[Dict[str, Any]] = []
-        for v in results:
-            name = v.get("name", "").strip()
-            if not name:
+        for el in elements:
+            v = self._osm_element_to_venue(el, full_state, target_city)
+            if not v:
                 continue
-            # If we've seen this name before, remove the old entry and append the new one
-            # so online (which comes after curated) wins.
-            if name.lower() in seen:
-                final = [x for x in final if x.get("name", "").strip().lower() != name.lower()]
-            else:
-                seen.add(name.lower())
-            v.setdefault("state", full_state)
-            if not v.get("contact"):
-                v["contact"] = self._contact_from_name(name)
-            final.append(v)
+            key = v["name"].lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            # Query-scope flag: only radius-limited (around-point) results
+            # bypass the city relevance filter.
+            v["_radius_limited"] = bool(lat and lon)
+            results.append(v)
+        if results:
+            self._osm_cache[cache_key] = list(results)
+        return results
 
-        return final
+    # ------------------------------------------------------------------ #
+    # Google Places — optional small/medium + church source (needs API key)
+    # ------------------------------------------------------------------ #
+    def _search_google_places(self, lat: Optional[float], lon: Optional[float],
+                              city: str, state: str,
+                              church_focus: bool) -> List[Dict[str, Any]]:
+        key = (os.environ.get("GOOGLE_PLACES_API_KEY") or "").strip()
+        if not key:
+            return []
+        queries: List[str] = []
+        if church_focus:
+            queries += ["church", "worship center"]
+        queries += ["live music venue", "bar with live music"]
+        seen_q: Set[str] = set()
+        qlist: List[str] = []
+        for q in queries:
+            if q not in seen_q:
+                seen_q.add(q)
+                qlist.append(q)
+        qlist = qlist[:3]
+        area = f"{city}, {state}" if city and state else (state or city or "")
+        if not area and not (lat and lon):
+            return []
+        out: List[Dict[str, Any]] = []
+        field_mask = ("places.displayName,places.formattedAddress,places.location,"
+                      "places.types,places.websiteUri,places.nationalPhoneNumber")
+        for q in qlist:
+            cache_key = f"gp|{q}|{area}|{round(lat or 0, 2)}|{round(lon or 0, 2)}"
+            if cache_key in self._gplaces_cache:
+                out.extend(self._gplaces_cache[cache_key])
+                continue
+            body: Dict[str, Any] = {"textQuery": f"{q} in {area}" if area else q}
+            if lat and lon:
+                body["locationBias"] = {"circle": {
+                    "center": {"latitude": lat, "longitude": lon}, "radius": 40000.0}}
+            batch: List[Dict[str, Any]] = []
+            try:
+                self._rate_limit()
+                r = self.client.post(GOOGLE_PLACES_URL, json=body, headers={
+                    "X-Goog-Api-Key": key,
+                    "X-Goog-FieldMask": field_mask,
+                }, timeout=10.0)
+                if r.status_code != 200:
+                    continue
+                for p in (r.json().get("places") or [])[:8]:
+                    name = (p.get("displayName") or {}).get("text", "").strip()
+                    if not name:
+                        continue
+                    types = p.get("types") or []
+                    if "church" in types or "place_of_worship" in types:
+                        vt = "church"
+                    elif "bar" in types:
+                        vt = "bar"
+                    elif "night_club" in types:
+                        vt = "club"
+                    elif "cafe" in types:
+                        vt = "cafe"
+                    elif "concert_hall" in types or "theater" in types:
+                        vt = "theater"
+                    elif "community_center" in types:
+                        vt = "civic"
+                    else:
+                        vt = None
+                    loc = p.get("location") or {}
+                    batch.append({
+                        "name": name, "city": city, "state": state,
+                        "address": p.get("formattedAddress", ""),
+                        "capacity": None, "capacity_estimate": True,
+                        "website": p.get("websiteUri", ""),
+                        "phone": p.get("nationalPhoneNumber", ""),
+                        "source": "Google Places",
+                        "venue_type": vt,
+                        "latitude": loc.get("latitude", 0),
+                        "longitude": loc.get("longitude", 0),
+                        "reason": (f"Google Places: '{q}' match"
+                                   + (" — church result for worship query" if vt == "church" else " (nearby local venue)")),
+                    })
+                    batch[-1]["_radius_limited"] = bool(lat and lon)
+            except Exception:
+                continue
+            self._gplaces_cache[cache_key] = list(batch)
+            out.extend(batch)
+        return out
 
-    def _search_wikipedia_venues(self, state: str) -> List[Dict[str, Any]]:
+    # ------------------------------------------------------------------ #
+    # Wikipedia — state/city/denomination category discovery
+    # ------------------------------------------------------------------ #
+    def _wiki_search_terms(self, church_intent: bool, country_intent: bool) -> List[str]:
+        """Full-text search phrases tuned to the query intent."""
+        terms: List[str] = []
+        if church_intent:
+            terms += ["church", "Baptist church", "Methodist church"]
+        if country_intent:
+            terms += ["honky-tonk", "dance hall", "country music venue"]
+        if not terms:
+            terms = ["live music venue", "music venue", "concert hall"]
+        return terms[:3]
+
+    def _wikipedia_text_search(self, srquery: str, limit: int = 12) -> List[Dict[str, Any]]:
+        """Search Wikipedia full text (not just categories) — this is how the
+        finder self-discovers city-level venues and churches that have no
+        dedicated category (e.g. articles titled '... (Abilene, Texas)')."""
+        params = {
+            "action": "query", "format": "json",
+            "list": "search",
+            "srsearch": srquery,
+            "srlimit": str(limit),
+        }
+        data = self._wiki_get(params)
+        out: List[Dict[str, Any]] = []
+        for item in (data.get("query") or {}).get("search", []):
+            title = (item.get("title") or "").strip()
+            if not title or "List of" in title or "Category:" in title:
+                continue
+            snippet = re.sub(r"<[^>]+>", "", item.get("snippet") or "")
+            out.append({"title": title, "pageid": item.get("pageid", 0),
+                        "snippet": snippet})
+        return out
+
+    def _search_wikipedia_venues(self, state: str, target_city: str = "",
+                                 country_intent: bool = False) -> List[Dict[str, Any]]:
         seen_titles: Set[str] = set()
-        all_titles = []
+        all_titles: List[Dict[str, Any]] = []
+        church_intent = any(w in self._genre for w in CHURCH_KEYWORDS)
 
-        # --- Per-state base categories ---
-        is_christian = any(w in self._genre for w in ["christian", "church", "gospel", "religious", "worship", "faith", "spiritual"])
-
-        if is_christian:
-            # For Christian/gospel, crawl church categories first via wide crawl, then fallback venues
-            root_categories = [
+        venue_root_categories = [
+            f"Category:Music venues in {state}",
+            f"Category:Concert halls in {state}",
+            f"Category:Nightclubs in {state}",
+            f"Category:Theatres in {state}",
+            f"Category:Performing arts centres in {state}",
+            f"Category:Event venues in {state}",
+            f"Category:Music festivals in {state}",
+            f"Category:Festivals in {state}",
+        ]
+        church_root_categories: List[str] = []
+        if church_intent:
+            church_root_categories = [
                 f"Category:Churches in {state}",
+                f"Category:Churches in {state} by populated place",
                 f"Category:Religious buildings and structures in {state}",
                 f"Category:Megachurches in {state}",
                 f"Category:Baptist churches in {state}",
@@ -454,47 +817,83 @@ class BookingAgent:
                 f"Category:Presbyterian churches in {state}",
                 f"Category:Lutheran churches in {state}",
                 f"Category:Episcopal church buildings in {state}",
+                f"Category:Pentecostal churches in {state}",
+                f"Category:Evangelical churches in {state}",
                 f"Category:Cathedrals in {state}",
-                f"Category:Music venues in {state}",
-                f"Category:Concert halls in {state}",
             ]
-        else:
-            root_categories = [
-                f"Category:Music venues in {state}",
-                f"Category:Concert halls in {state}",
-                f"Category:Nightclubs in {state}",
-                f"Category:Theatres in {state}",
-                f"Category:Performing arts centres in {state}",
-                f"Category:Event venues in {state}",
-                f"Category:Music festivals in {state}",
-                f"Category:Festivals in {state}",
-            ]
-        if state == "Texas" and not is_christian:
-            root_categories.append("Category:Music venues in Texas by city")
+            if target_city:
+                church_root_categories.insert(0, f"Category:Churches in {target_city}, {state}")
 
+        genre_categories: List[str] = []
         for genre_key, cats in GENRE_CATEGORIES.items():
             if genre_key in self._genre:
                 for c in cats:
-                    if c not in root_categories:
-                        root_categories.append(c)
+                    if c not in genre_categories and " in " not in c:
+                        genre_categories.append(c)
 
-        # --- Crawl categories (reduced deadline for speed) ---
-        deadline = time.time() + 20.0
-        for cat in root_categories:
+        deadline = time.time() + 22.0
+
+        for cat in church_root_categories:
             if time.time() > deadline:
                 break
-            is_genre_specific = any(cat == c for cats in GENRE_CATEGORIES.values() for c in cats) and " in " not in cat
-            is_church_cat = "Churches in " in cat or "Religious buildings" in cat
-            if is_church_cat:
-                # Efficient "wide" crawl: get subcats, then pages from each subcat
-                self._collect_church_pages(cat, seen_titles, all_titles, deadline)
-            elif is_genre_specific:
-                md = 0
-            else:
-                md = 1
-                self._collect_category_pages(cat, seen_titles, all_titles, depth=0, max_depth=md, deadline=deadline)
+            self._collect_church_pages(cat, seen_titles, all_titles, deadline,
+                                       category_label=cat, church=True)
 
-        # --- Genre-specific list pages ---
+        # Full-text search first for city queries — highest-value local recall
+        # (finds 'First Baptist Church (Abilene, Texas)' style articles that
+        # have no city subcategory). Gate hard: the TITLE must look like a
+        # venue, and the article must mention the city — generic articles
+        # ('Tack piano', 'Music of Texas', out-of-state Abilenes) never ship.
+        if target_city:
+            venue_kw = ("venue", "theater", "theatre", "hall", "church",
+                        "auditorium", "arena", "club", "saloon", "dance",
+                        "concert", "honky", "cabaret", "amphitheater",
+                        "amphitheatre", "pavilion", "live music", "warehouse",
+                        "supper", "crossing", "garden", "tavern", "pub",
+                        "grill", "depot", "barn", "mill", "store", "stadium",
+                        "coliseum", "opera", "ballroom", "stage")
+            tc_l = target_city.lower()
+            st_l = state.lower()
+            for terms in self._wiki_search_terms(church_intent, country_intent):
+                if time.time() > deadline:
+                    break
+                try:
+                    hits = self._wikipedia_text_search(f"{terms} {target_city} {state}")
+                except Exception:
+                    hits = []
+                for h in hits:
+                    if h["title"] in seen_titles:
+                        continue
+                    title_l = h["title"].lower()
+                    combined = f"{title_l} {h.get('snippet', '').lower()}"
+                    if tc_l not in combined:
+                        continue
+                    if not any(k in title_l for k in venue_kw):
+                        continue
+                    if st_l not in combined and tc_l not in title_l:
+                        continue
+                    seen_titles.add(h["title"])
+                    all_titles.append({
+                        "title": h["title"], "pageid": h.get("pageid", 0),
+                        "category": f"Wikipedia search: '{terms} {target_city}'",
+                        "church": church_intent and bool(CHURCH_NAME_RE.search(h["title"])),
+                        "city_hint": target_city,
+                    })
+
+        for cat in venue_root_categories:
+            if time.time() > deadline:
+                break
+            self._collect_category_pages(cat, seen_titles, all_titles, depth=0,
+                                         max_depth=1, deadline=deadline, category_label=cat)
+
+        # Genre-specific categories are national — now actually crawled (was a dead branch).
+        for cat in genre_categories:
+            if time.time() > deadline:
+                break
+            self._collect_category_pages(cat, seen_titles, all_titles, depth=0,
+                                         max_depth=1, deadline=deadline, category_label=cat)
+
+        # Genre-specific list pages
         list_pages = set()
         for genre_key, pages in GENRE_LIST_PAGES.items():
             if genre_key in self._genre:
@@ -515,23 +914,39 @@ class BookingAgent:
                 for v in parsed:
                     if v["name"] not in seen_titles:
                         seen_titles.add(v["name"])
-                        all_titles.append({"title": v["name"], "pageid": 0, "city_hint": v.get("city", "")})
+                        all_titles.append({"title": v["name"], "pageid": 0,
+                                           "city_hint": v.get("city", ""),
+                                           "category": f"Wikipedia list: {page_title}",
+                                           "church": church_intent and any(
+                                               k in page_title.lower()
+                                               for k in ("megachurch", "baptist", "catholic", "christian", "gospel"))})
             except Exception:
                 pass
 
         titles = all_titles
-        details = self._get_venue_details(titles, deadline)
-        out = []
+        # Always reserve time for the details pass even if the crawl used its
+        # full budget — without extracts we get no cities and no capacities.
+        if target_city:
+            tc_l = target_city.lower()
+            titles = sorted(titles, key=lambda t: 0 if tc_l in t["title"].lower() else 1)
+        details = self._get_venue_details(titles[:400], time.time() + 12.0)
+        out: List[Dict[str, Any]] = []
         for t in titles:
             title = t["title"]
             info = details.get(title, {})
+            cap = info.get("capacity")
             out.append({
                 "name": title,
                 "city": info.get("city") or t.get("city_hint", ""),
-                "capacity": info.get("capacity"),
+                "state": state,
+                "capacity": cap,
+                "capacity_estimate": bool(cap),
                 "contact": self._contact_from_name(title),
                 "website": info.get("url", f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"),
-                "source": "Wikipedia"
+                "source": "Wikipedia",
+                "venue_type": "church" if t.get("church") else None,
+                "reason": (f"Wikipedia: match in '{t.get('category', '')}'"
+                           + (" — church listing for worship query" if t.get("church") else "")),
             })
         return out
 
@@ -564,7 +979,6 @@ class BookingAgent:
                 name = name_match.group(2).strip()
                 if "List of" in name or "Category:" in name:
                     continue
-                # Try to extract city and state from cells
                 city = ""
                 if len(cells) > 1:
                     city_text = re.sub(r'<[^>]+>', '', cells[1]).strip()
@@ -574,7 +988,6 @@ class BookingAgent:
                     state_found = False
                     for cell in cells:
                         cell_text = re.sub(r'<[^>]+>', '', cell).strip()
-                        # Match "TX", "Texas", state abbreviations
                         if cell_text == target_state or cell_text == _STATE_ABBR.get(target_state, ""):
                             state_found = True
                             break
@@ -583,19 +996,16 @@ class BookingAgent:
                             if cell_text == rev_abbr.get(target_state, ""):
                                 state_found = True
                                 break
-                        if cell_text == target_state:
-                            # E.g. "Texas" in cell matches target_state "Texas"
-                            state_found = True
-                            break
                     if not state_found:
                         continue
                 venues.append({"name": name, "city": city})
         return venues
 
-    def _collect_category_pages(self, category: str, seen: Set[str], titles: list, depth: int = 0, max_depth: int = 2, deadline: float = 0.0):
+    def _collect_category_pages(self, category: str, seen: Set[str], titles: list,
+                                depth: int = 0, max_depth: int = 2,
+                                deadline: float = 0.0, category_label: str = ""):
         if depth > max_depth:
             return
-        # At the leaf depth (== max_depth), only request pages — no further subcat recursion
         cmtype = "page" if depth == max_depth else "page|subcat"
         params = {
             "action": "query", "format": "json",
@@ -604,6 +1014,7 @@ class BookingAgent:
             "cmlimit": "max",
             "cmtype": cmtype,
         }
+        label = category_label or category
         subcats = []
         while True:
             if deadline and time.time() > deadline:
@@ -618,7 +1029,8 @@ class BookingAgent:
                     subcats.append(title)
                 elif title not in seen and "List of" not in title and "Category:" not in title:
                     seen.add(title)
-                    titles.append({"title": title, "pageid": m.get("pageid", 0)})
+                    titles.append({"title": title, "pageid": m.get("pageid", 0),
+                                   "category": label})
             cont = data.get("continue", {})
             if "cmcontinue" in cont:
                 params["cmcontinue"] = cont["cmcontinue"]
@@ -627,13 +1039,14 @@ class BookingAgent:
         for sc in subcats:
             if deadline and time.time() > deadline:
                 return
-            self._collect_category_pages(sc, seen, titles, depth + 1, max_depth, deadline)
+            self._collect_category_pages(sc, seen, titles, depth + 1, max_depth,
+                                         deadline, category_label=label)
 
-    def _collect_church_pages(self, category: str, seen: Set[str], titles: list, deadline: float = 0.0):
-        """Efficient church crawl: get all subcats, then pages from each.
-        One level only — skips subcats that have no pages (e.g. by-county) to save time.
-        Also gets pages directly from the root category."""
-        # Direct pages from the root
+    def _collect_church_pages(self, category: str, seen: Set[str], titles: list,
+                              deadline: float = 0.0, category_label: str = "",
+                              church: bool = True):
+        """Wide church crawl: root pages, then subcat pages, one deeper if empty."""
+        label = category_label or category
         params_root = {
             "action": "query", "format": "json",
             "list": "categorymembers",
@@ -651,14 +1064,14 @@ class BookingAgent:
                 title = m["title"]
                 if title not in seen and "List of" not in title:
                     seen.add(title)
-                    titles.append({"title": title, "pageid": m.get("pageid", 0)})
+                    titles.append({"title": title, "pageid": m.get("pageid", 0),
+                                   "category": label, "church": church})
             cont = data.get("continue", {})
             if "cmcontinue" in cont:
                 params_root["cmcontinue"] = cont["cmcontinue"]
             else:
                 break
 
-        # Get all subcategories
         subcats = []
         params = {
             "action": "query", "format": "json",
@@ -682,7 +1095,6 @@ class BookingAgent:
             else:
                 break
 
-        # Get pages from each subcat (one level only)
         for sc in subcats:
             if deadline and time.time() > deadline:
                 return
@@ -705,13 +1117,13 @@ class BookingAgent:
                     if title not in seen and "List of" not in title:
                         seen.add(title)
                         page_count += 1
-                        titles.append({"title": title, "pageid": m.get("pageid", 0)})
+                        titles.append({"title": title, "pageid": m.get("pageid", 0),
+                                       "category": label, "church": church})
                 cont = data.get("continue", {})
                 if "cmcontinue" in cont:
                     params2["cmcontinue"] = cont["cmcontinue"]
                 else:
                     break
-            # If subcat had no pages, try its subcats one level deeper
             if page_count == 0:
                 deeper = []
                 params3 = {
@@ -755,7 +1167,8 @@ class BookingAgent:
                             title = m["title"]
                             if title not in seen and "List of" not in title:
                                 seen.add(title)
-                                titles.append({"title": title, "pageid": m.get("pageid", 0)})
+                                titles.append({"title": title, "pageid": m.get("pageid", 0),
+                                               "category": label, "church": church})
                         cont = data.get("continue", {})
                         if "cmcontinue" in cont:
                             params4["cmcontinue"] = cont["cmcontinue"]
@@ -765,13 +1178,13 @@ class BookingAgent:
     def _get_venue_details(self, titles: List[Dict], deadline: float = 0.0) -> Dict[str, Dict[str, Any]]:
         if not titles:
             return {}
-        details = {}
+        details: Dict[str, Dict[str, Any]] = {}
         city_pattern = re.compile(r"in\s+([A-Z][a-zA-Z\s.]+?)(?:,\s*[A-Z]{2}|\.)")
         real_titles = [t["title"] for t in titles]
         for i in range(0, len(real_titles), 50):
             if deadline and time.time() > deadline:
                 break
-            batch = real_titles[i:i+50]
+            batch = real_titles[i:i + 50]
             params = {
                 "action": "query", "format": "json",
                 "titles": "|".join(batch),
@@ -788,6 +1201,7 @@ class BookingAgent:
                     title = page.get("title", "")
                     extract = page.get("extract", "")
                     city = ""
+                    capacity = None
                     if extract:
                         m = city_pattern.search(extract)
                         if m:
@@ -796,12 +1210,296 @@ class BookingAgent:
                             first = extract.split(".")[0]
                             if len(first) < 80:
                                 city = first.strip()
+                        capacity = self._extract_capacity(extract)
                     details[title] = {
                         "url": page.get("fullurl", ""),
-                        "city": city
+                        "city": city,
+                        "capacity": capacity,
                     }
         return details
 
+    def _extract_capacity(self, text: str) -> Optional[int]:
+        if not text:
+            return None
+        for pat in (_CAP_EXTRACT_RE, _CAP_ALT_RE):
+            m = pat.search(text)
+            if m:
+                try:
+                    n = int(m.group(1).replace(",", ""))
+                    if 10 <= n <= 200000:
+                        return n
+                except ValueError:
+                    continue
+        return None
+
+    # ------------------------------------------------------------------ #
+    # Classification / ranking — ordering only, never exclusionary
+    # ------------------------------------------------------------------ #
+    def _classify(self, v: Dict[str, Any]):
+        name = v.get("name", "")
+        name_l = name.lower()
+        vt = v.get("venue_type")
+        if not vt or vt == "other":
+            if CHURCH_NAME_RE.search(name_l) and not CHURCH_NAME_EXCLUDE_RE.search(name_l):
+                vt = "church"
+            elif LISTENING_NAME_RE.search(name_l):
+                vt = "listening_room"
+            elif OUTDOOR_NAME_RE.search(name_l):
+                vt = "outdoor"
+            elif ARENA_NAME_RE.search(name_l):
+                vt = "other"
+            elif THEATER_NAME_RE.search(name_l):
+                vt = "theater"
+            elif CLUB_NAME_RE.search(name_l):
+                vt = "club"
+            elif CAFE_NAME_RE.search(name_l):
+                vt = "cafe"
+            elif BAR_NAME_RE.search(name_l):
+                vt = "bar"
+            elif CIVIC_NAME_RE.search(name_l):
+                vt = "civic"
+            else:
+                vt = "other"
+        v["venue_type"] = vt
+
+        cap = v.get("capacity") or 0
+        try:
+            cap = int(cap)
+        except (TypeError, ValueError):
+            cap = 0
+        if cap <= 0 or cap > 200000:
+            cap = None
+        v["capacity"] = cap
+        estimate = bool(v.get("capacity_estimate")) or cap is None
+        v["capacity_estimate"] = estimate
+        if cap:
+            v["size_class"] = "small" if cap < 500 else ("medium" if cap <= 1500 else "large")
+        else:
+            est = {"bar": "small", "club": "small", "cafe": "small",
+                   "listening_room": "small", "church": "medium", "theater": "medium",
+                   "civic": "medium", "outdoor": "medium", "other": "medium"}
+            if ARENA_NAME_RE.search(name_l):
+                v["size_class"] = "large"
+            else:
+                v["size_class"] = est.get(vt, "medium")
+
+        if not v.get("city"):
+            v["city"] = ""
+        if not v.get("address"):
+            abbr = _STATE_ABBR.get((v.get("state") or "").title(), "")
+            v["address"] = f"{v['city']}, {abbr}" if v.get("city") and abbr else v.get("city", "")
+        if not v.get("reason"):
+            src = v.get("source", "")
+            if src.startswith("SoundScape"):
+                v["reason"] = "Curated SoundScape live-music target"
+            else:
+                v["reason"] = f"Included from {src} as a live-music-capable venue"
+        size_note = (f"capacity {cap}" if cap
+                     else f"~{v['size_class']} by venue type (est.)")
+        v["reason"] = f"{v['reason']} · {size_note}"
+
+    def _city_matches(self, v: Dict[str, Any], target_city: str, full_state: str) -> bool:
+        tc = target_city.lower().strip()
+        if not tc:
+            return True
+        if v.get("_radius_limited"):
+            return True
+        vcity = (v.get("city") or "").lower().strip()
+        if not vcity:
+            # Unknown city: keep local sources, but drop state-level Wikipedia
+            # crawl noise from city-targeted searches.
+            return v.get("source") != "Wikipedia"
+        if tc in vcity or vcity in tc:
+            return True
+        if tc in (v.get("name") or "").lower():
+            return True
+        return False
+
+    def _score(self, v: Dict[str, Any], church_intent: bool, country_intent: bool) -> int:
+        s = 0
+        if v.get("venue_type") == "church":
+            s += 100 if church_intent else 12
+        if country_intent:
+            nl = (v.get("name") or "").lower()
+            if "honky" in nl or "dance hall" in nl or "dancehall" in nl:
+                s += 25
+            elif "country" in nl:
+                s += 15
+            if "Country music venues" in (v.get("reason") or "") or "Honky-tonks" in (v.get("reason") or ""):
+                s += 10
+        if v.get("city_match"):
+            s += 20
+        src = v.get("source", "")
+        if src == "Google Places":
+            s += 4
+        elif src == "OpenStreetMap":
+            s += 3
+        elif src.startswith("SoundScape"):
+            s += 2
+        return s
+
+    def _rank_and_interleave(self, results: List[Dict[str, Any]], church_intent: bool,
+                             country_intent: bool, size_bias: str) -> List[Dict[str, Any]]:
+        buckets: Dict[str, List[Dict[str, Any]]] = {
+            "small": [], "medium": [], "large": [], "church": [], "other": [],
+        }
+        for v in results:
+            if v.get("venue_type") == "church":
+                buckets["church"].append(v)
+            else:
+                buckets.get(v.get("size_class") or "other", buckets["other"]).append(v)
+        for b in buckets.values():
+            b.sort(key=lambda v: -self._score(v, church_intent, country_intent))
+        # Size bias duplicates its bucket in the rotation so it appears ~2x
+        # as often per cycle — ordering only, nothing is filtered out.
+        if size_bias == "large":
+            order = ["large", "large", "medium", "small", "church", "other"]
+        elif size_bias == "small":
+            order = ["small", "small", "medium", "large", "church", "other"]
+        else:
+            order = ["small", "medium", "large", "church", "other"]
+
+        def interleave(keys: List[str]) -> List[Dict[str, Any]]:
+            # Weighted rotation with per-bucket pointers: biased buckets appear
+            # more often per cycle, but every venue is emitted exactly once.
+            ptr = {k: 0 for k in buckets}
+            out: List[Dict[str, Any]] = []
+            remaining = sum(len(buckets[k]) for k in set(keys))
+            while remaining > 0:
+                for k in keys:
+                    b = buckets[k]
+                    if ptr[k] < len(b):
+                        out.append(b[ptr[k]])
+                        ptr[k] += 1
+                        remaining -= 1
+            return out
+
+        if church_intent:
+            # Churches strictly first, then a balanced mix of the rest.
+            return buckets["church"] + interleave([k for k in order if k != "church"])
+        return interleave(order)
+
+    # ------------------------------------------------------------------ #
+    # Main entry point
+    # ------------------------------------------------------------------ #
+    def search_venues(self, state: Optional[str] = None, genre: str = "live music",
+                      include_churches: bool = False, query: Optional[str] = None,
+                      size_filter: str = "all", type_filter: str = "all",
+                      lat: Optional[float] = None,
+                      lon: Optional[float] = None) -> List[Dict[str, Any]]:
+        """Find live-music venues of EVERY size, plus churches when asked.
+
+        There is deliberately NO capacity, popularity, follower, or
+        upcoming-event gate: if a source lists it, it ships (filters only
+        narrow the *display* after ranking, and 'all' disables them).
+        """
+        query = (query or "").strip()
+        genre_l = (genre or "").strip()
+        self._genre = f"{genre_l} {query}".lower().strip() or "live music"
+
+        parsed = self._parse_query(query)
+        church_intent = bool(include_churches) or parsed["church_intent"] or any(
+            w in (genre_l.lower()) for w in CHURCH_KEYWORDS)
+        country_intent = parsed["country_intent"] or "country" in (genre_l.lower())
+        size_bias = parsed["size_bias"]
+
+        full_state = self._normalize_state(state or "") or parsed["state"]
+        target_city = parsed["city"]
+
+        coords: Optional[tuple] = (lat, lon) if (lat and lon) else None
+        if not coords and target_city:
+            g = self._geocode(target_city, full_state)
+            if g:
+                coords = (g["lat"], g["lon"])
+                target_city = g.get("matched_city") or target_city
+        if coords and not full_state:
+            rev = self._reverse_geocode(coords[0], coords[1])
+            if rev:
+                full_state = rev.get("state") or full_state
+                target_city = target_city or rev.get("city") or ""
+
+        results: List[Dict[str, Any]] = []
+
+        # 1. Curated seeds (always — works offline).
+        for v in CURATED_VENUES.get(full_state, []):
+            v = dict(v)
+            v.setdefault("source", "SoundScape Pilot Curated")
+            v.setdefault("state", full_state)
+            is_church = v.get("venue_type") == "church"
+            cap = v.get("capacity") or 0
+            v["reason"] = (
+                f"Curated {'church venue for the Christian format' if is_church else 'live-music target'}"
+                + (f" — {cap} cap" if cap else ""))
+            results.append(v)
+
+        # 2. Wikipedia (state + city + denomination categories).
+        if full_state:
+            try:
+                results.extend(self._search_wikipedia_venues(full_state, target_city,
+                                                             country_intent))
+            except Exception:
+                pass
+
+        # 3. OpenStreetMap — bars/cafes/theaters/outdoor AND churches (when asked).
+        if full_state or coords:
+            try:
+                results.extend(self._search_osm(
+                    coords[0] if coords else None, coords[1] if coords else None,
+                    full_state, target_city, church_focus=church_intent))
+            except Exception:
+                pass
+
+        # 4. Google Places (optional; needs GOOGLE_PLACES_API_KEY).
+        try:
+            results.extend(self._search_google_places(
+                coords[0] if coords else None, coords[1] if coords else None,
+                target_city, full_state, church_intent))
+        except Exception:
+            pass
+
+        # 5. Dedup — later (fresher) sources override curated on name collision.
+        seen: Set[str] = set()
+        final: List[Dict[str, Any]] = []
+        for v in results:
+            name = (v.get("name") or "").strip()
+            if not name:
+                continue
+            key = re.sub(r"[^a-z0-9]", "", name.lower())
+            if key in seen:
+                final = [x for x in final
+                         if re.sub(r"[^a-z0-9]", "", (x.get("name") or "").lower()) != key]
+            else:
+                seen.add(key)
+            v.setdefault("state", full_state)
+            if not v.get("contact"):
+                v["contact"] = self._contact_from_name(name)
+            final.append(v)
+
+        # 6. Classify (venue_type, size_class, address, reason).
+        for v in final:
+            self._classify(v)
+
+        # 7. Location targeting: for city searches keep the metro area,
+        #    radius-limited providers always pass.
+        if target_city:
+            for v in final:
+                v["city_match"] = self._city_matches(v, target_city, full_state)
+            final = [v for v in final if v.get("city_match")]
+
+        # 8. Rank: church-first for worship queries; balanced interleave otherwise.
+        ranked = self._rank_and_interleave(final, church_intent, country_intent, size_bias)
+
+        # 9. Display filters (post-ranking only; 'all' = no filtering).
+        if size_filter and size_filter != "all":
+            ranked = [v for v in ranked if v.get("size_class") == size_filter]
+        if type_filter and type_filter != "all":
+            ranked = [v for v in ranked if v.get("venue_type") == type_filter]
+
+        return ranked
+
+    # ------------------------------------------------------------------ #
+    # EPK / contract text
+    # ------------------------------------------------------------------ #
     def generate_epk_text(self, artist_name: str, genre: str, venue_name: str) -> str:
         return (
         f"Dear {venue_name} Talent Buyer,\n\n"

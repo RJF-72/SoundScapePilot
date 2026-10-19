@@ -18,8 +18,8 @@ class CatalogManager:
             "id": release_id,
             "title": title,
             "artist": artist,
-            "upc": upc or self._generate_upc(),
-            "isrc": isrc,
+            "upc": (upc or "").strip(),
+            "isrc": (isrc or "").strip(),
             "genre": genre,
             "release_date": release_date or datetime.now().strftime("%Y-%m-%d"),
             "label": label,
@@ -36,11 +36,6 @@ class CatalogManager:
         db.save_catalog_release(release)
         return release
 
-    def _generate_upc(self) -> str:
-        prefix = "008428"
-        unique = str(uuid.uuid4().int)[:5]
-        return f"{prefix}{unique}"
-
     def add_track(self, release_id: str, title: str, isrc: str = "",
                    artists: list = None, writers: list = None,
                    producers: list = None, duration_sec: int = 0,
@@ -51,7 +46,7 @@ class CatalogManager:
         track = {
             "id": str(uuid.uuid4())[:12],
             "title": title,
-            "isrc": isrc or f"USRRM{datetime.now().strftime('%y')}{str(uuid.uuid4().int)[:5]}",
+            "isrc": (isrc or "").strip(),
             "artists": artists or [release["artist"]],
             "writers": writers or [],
             "producers": producers or [],

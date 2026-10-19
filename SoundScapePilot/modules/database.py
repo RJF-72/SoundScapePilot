@@ -266,6 +266,222 @@ def _init_tables(cur):
         )
     """)
 
+    # Royalty engine
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS royalty_songs (
+            id TEXT PRIMARY KEY,
+            isrc TEXT DEFAULT '',
+            upc TEXT DEFAULT '',
+            title TEXT DEFAULT '',
+            artists TEXT DEFAULT '[]',
+            writers TEXT DEFAULT '[]',
+            producers TEXT DEFAULT '[]',
+            publishers TEXT DEFAULT '[]',
+            release_date TEXT DEFAULT '',
+            genre TEXT DEFAULT '',
+            duration_sec INTEGER DEFAULT 0,
+            registered TEXT DEFAULT '',
+            streams TEXT DEFAULT '{}',
+            sales INTEGER DEFAULT 0,
+            sync_income REAL DEFAULT 0
+        )
+    """)
+
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS royalty_split_agreements (
+            id TEXT PRIMARY KEY,
+            title TEXT DEFAULT '',
+            isrc TEXT DEFAULT '',
+            parties TEXT DEFAULT '[]',
+            created TEXT DEFAULT ''
+        )
+    """)
+
+    # Catalog manager
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS catalog_releases (
+            id TEXT PRIMARY KEY,
+            title TEXT DEFAULT '',
+            artist TEXT DEFAULT '',
+            upc TEXT DEFAULT '',
+            isrc TEXT DEFAULT '',
+            genre TEXT DEFAULT '',
+            release_date TEXT DEFAULT '',
+            label TEXT DEFAULT '',
+            catalog_number TEXT DEFAULT '',
+            tracks TEXT DEFAULT '[]',
+            artwork_url TEXT DEFAULT '',
+            lyrics TEXT DEFAULT '',
+            credits TEXT DEFAULT '',
+            status TEXT DEFAULT 'draft',
+            created TEXT DEFAULT '',
+            updated TEXT DEFAULT '',
+            version_history TEXT DEFAULT '[]'
+        )
+    """)
+
+    # Distribution pipeline (third-party handoff records)
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS distro_deliveries (
+            id TEXT PRIMARY KEY,
+            platform TEXT DEFAULT '',
+            platform_name TEXT DEFAULT '',
+            status TEXT DEFAULT '',
+            metadata TEXT DEFAULT '{}',
+            created TEXT DEFAULT '',
+            estimated_delivery TEXT DEFAULT '',
+            errors TEXT DEFAULT '[]'
+        )
+    """)
+
+    # Sync licensing
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS sync_pitches (
+            id TEXT PRIMARY KEY,
+            track_title TEXT DEFAULT '',
+            artist TEXT DEFAULT '',
+            isrc TEXT DEFAULT '',
+            supervisor TEXT DEFAULT '',
+            project TEXT DEFAULT '',
+            pitch_type TEXT DEFAULT '',
+            status TEXT DEFAULT 'sent',
+            notes TEXT DEFAULT '',
+            genre TEXT DEFAULT '',
+            mood_tags TEXT DEFAULT '[]',
+            created TEXT DEFAULT '',
+            follow_up_date TEXT DEFAULT '',
+            response TEXT DEFAULT '',
+            placed INTEGER DEFAULT 0
+        )
+    """)
+
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS sync_placements (
+            id TEXT PRIMARY KEY,
+            pitch_id TEXT DEFAULT '',
+            track_title TEXT DEFAULT '',
+            artist TEXT DEFAULT '',
+            isrc TEXT DEFAULT '',
+            project TEXT DEFAULT '',
+            supervisor TEXT DEFAULT '',
+            fee REAL DEFAULT 0,
+            contract_type TEXT DEFAULT 'sync_license',
+            term_months INTEGER DEFAULT 24,
+            territory TEXT DEFAULT 'worldwide',
+            placed_date TEXT DEFAULT '',
+            royalty_rate TEXT DEFAULT ''
+        )
+    """)
+
+    # Label identity + artist pipeline
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS label_roster (
+            id TEXT PRIMARY KEY,
+            name TEXT DEFAULT '',
+            stage TEXT DEFAULT 'development',
+            genre TEXT DEFAULT '',
+            bio TEXT DEFAULT '',
+            social_links TEXT DEFAULT '{}',
+            metadata TEXT DEFAULT '{}',
+            joined TEXT DEFAULT '',
+            next_release_date TEXT DEFAULT '',
+            milestones_completed TEXT DEFAULT '[]',
+            current_milestone TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            status TEXT DEFAULT 'active'
+        )
+    """)
+
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS label_submissions (
+            id TEXT PRIMARY KEY,
+            artist_name TEXT DEFAULT '',
+            email TEXT DEFAULT '',
+            genre TEXT DEFAULT '',
+            social_link TEXT DEFAULT '',
+            spotify_link TEXT DEFAULT '',
+            youtube_link TEXT DEFAULT '',
+            message TEXT DEFAULT '',
+            status TEXT DEFAULT 'new',
+            submitted TEXT DEFAULT '',
+            reviewed_by TEXT DEFAULT '',
+            review_notes TEXT DEFAULT '',
+            decision TEXT DEFAULT ''
+        )
+    """)
+
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS label_release_calendar (
+            id TEXT PRIMARY KEY,
+            title TEXT DEFAULT '',
+            artist TEXT DEFAULT '',
+            release_type TEXT DEFAULT '',
+            release_date TEXT DEFAULT '',
+            upc TEXT DEFAULT '',
+            genre TEXT DEFAULT '',
+            milestones TEXT DEFAULT '[]',
+            created TEXT DEFAULT ''
+        )
+    """)
+
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS label_brand (
+            id INTEGER PRIMARY KEY,
+            primary_color TEXT DEFAULT '',
+            secondary_color TEXT DEFAULT '',
+            accent_color TEXT DEFAULT '',
+            font_primary TEXT DEFAULT '',
+            font_secondary TEXT DEFAULT '',
+            logo_url TEXT DEFAULT '',
+            tagline TEXT DEFAULT '',
+            mission TEXT DEFAULT '',
+            label_values TEXT DEFAULT '[]'
+        )
+    """)
+
+    # EPK
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS epk (
+            id SERIAL PRIMARY KEY,
+            artist TEXT DEFAULT '',
+            genre TEXT DEFAULT '',
+            bio TEXT DEFAULT '',
+            spotify TEXT DEFAULT '',
+            soundcloud TEXT DEFAULT '',
+            apple_music TEXT DEFAULT '',
+            youtube TEXT DEFAULT '',
+            press_quotes TEXT DEFAULT '',
+            photo_url TEXT DEFAULT '',
+            website TEXT DEFAULT '',
+            instagram TEXT DEFAULT '',
+            facebook TEXT DEFAULT '',
+            twitter TEXT DEFAULT '',
+            contact_email TEXT DEFAULT '',
+            phone TEXT DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Radio: selected stations shortlist
+    _execute(cur, """
+        CREATE TABLE IF NOT EXISTS radio_selected (
+            id SERIAL PRIMARY KEY,
+            station_name TEXT UNIQUE,
+            vector TEXT DEFAULT '',
+            location TEXT DEFAULT '',
+            frequency TEXT DEFAULT '',
+            contact TEXT DEFAULT '',
+            website TEXT DEFAULT '',
+            match_score REAL DEFAULT 0,
+            genre TEXT DEFAULT '',
+            state TEXT DEFAULT '',
+            submission_method TEXT DEFAULT '',
+            submission_email TEXT DEFAULT '',
+            submission_notes TEXT DEFAULT '',
+            selected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
 def init_db():
     with get_connection() as conn:
         cur = conn.cursor()
@@ -338,10 +554,17 @@ def get_venues(state: Optional[str] = None) -> List[Dict[str, Any]]:
         return [dict(r) for r in cur.fetchall()]
 
 def update_venue(venue_id: int, updates: Dict[str, Any]):
+    allowed_fields = {"state", "name", "city", "capacity", "contact", "website", "status", "epk_sent", "contract_sent", "booked", "follow_up_count", "next_follow_up"}
     with get_connection() as conn:
         cur = conn.cursor()
-        fields = ", ".join([f"{k} = ?" for k in updates.keys()])
-        cur.execute(f"UPDATE venues SET {fields} WHERE id = ?", (*updates.values(), venue_id))
+        fields = ", ".join([f"{k} = ?" for k in updates.keys() if k in allowed_fields])
+        if not fields:
+            return
+        filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+        if USE_PG:
+            cur.execute(f"UPDATE venues SET {fields} WHERE id = %s", (*filtered_updates.values(), venue_id))
+        else:
+            cur.execute(f"UPDATE venues SET {fields} WHERE id = ?", (*filtered_updates.values(), venue_id))
         conn.commit()
 
 def insert_media_outlet(data: Dict[str, Any]) -> int:

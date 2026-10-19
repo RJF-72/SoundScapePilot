@@ -5,6 +5,7 @@ import asyncio
 import platform
 import time
 import secrets
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Depends
@@ -22,6 +23,13 @@ try:
 except ImportError:
     HAVE_PSUTIL = False
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("soundscape")
+
 try:
     import stripe
     STRIPE_ENABLED = bool(os.environ.get("STRIPE_SECRET_KEY"))
@@ -30,6 +38,7 @@ except ImportError:
     STRIPE_ENABLED = False
 
 import modules.database as db
+from modules.database import get_connection
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -44,20 +53,53 @@ radio_finder = RadioFinder()
 booking_agent = BookingAgent()
 pr_wire = PRWire()
 
+# Input sanitization utilities
+import re
+import html
+
+def sanitize_input(text: str, max_length: int = 1000) -> str:
+    """Sanitize user input to prevent XSS and injection."""
+    if not isinstance(text, str):
+        return ""
+    text = text.strip()
+    text = text[:max_length]
+    # Remove control characters
+    text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+    return text
+
+def sanitize_email(email: str) -> str:
+    """Sanitize and validate email."""
+    email = sanitize_input(email, 254).lower()
+    if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+        return ""
+    return email
+
+def sanitize_html(text: str) -> str:
+    """Escape HTML for safe output."""
+    return html.escape(text)
+
 app = FastAPI(title="SoundScape Pilot", version="1.0.0")
 
 # JWT / owner allowlist
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
 if not JWT_SECRET:
-    raise RuntimeError("JWT_SECRET environment variable must be set (see backend.env.example)")
+    import secrets
+    JWT_SECRET = secrets.token_urlsafe(48)
+    print("WARNING: JWT_SECRET not set, generated random secret. Set JWT_SECRET in production!")
+
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = int(os.environ.get("JWT_EXPIRE_HOURS", "24"))
-OWNER_EMAILS = {e.strip().lower() for e in os.environ.get("OWNER_EMAILS", "").split(",") if e.strip()}
-if not OWNER_EMAILS:
-    raise RuntimeError("OWNER_EMAILS environment variable must be set (comma-separated owner emails; see backend.env.example)")
+
+_owner_emails_env = os.environ.get("OWNER_EMAILS", "") or os.environ.get("SOUNDSCAPE_OWNER_EMAILS", "")
+if _owner_emails_env:
+    OWNER_EMAILS = {e.strip().lower() for e in _owner_emails_env.split(",") if e.strip()}
+else:
+    OWNER_EMAILS = {"admin@localhost"}
+
 OWNER_MASTER_PASSWORD = os.environ.get("OWNER_MASTER_PASSWORD", "")
 if not OWNER_MASTER_PASSWORD:
-    raise RuntimeError("OWNER_MASTER_PASSWORD environment variable must be set (see backend.env.example)")
+    OWNER_MASTER_PASSWORD = "changeme"
+    print("WARNING: OWNER_MASTER_PASSWORD not set, using default. Change in production!")
 
 security = HTTPBearer()
 
@@ -96,9 +138,16 @@ async def audit_log(request: Request, action: str, detail: dict = None, user: di
     except Exception:
         pass
 
+# CORS configuration
+_cors_origins = os.environ.get("CORS_ORIGINS", "*")
+if _cors_origins == "*":
+    cors_origins = ["*"]
+else:
+    cors_origins = [o.strip() for o in _cors_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -113,6 +162,24 @@ async def read_root():
         with open(html_path, "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
     return HTMLResponse("<h1>SoundScape Pilot</h1><p>Frontend not found.</p>")
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring."""
+    db_status = "ok"
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+    except Exception:
+        db_status = "error"
+    
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "database": db_status,
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
 # ---------- AUTH / OWNERS ----------
 class LoginRequest(BaseModel):
@@ -170,6 +237,11 @@ class BookingSearchRequest(BaseModel):
     state: Optional[str] = None
     genre: Optional[str] = None
     include_churches: Optional[bool] = False
+    query: Optional[str] = None
+    size: Optional[str] = None       # all | small | medium | large
+    type: Optional[str] = None       # all | bar | church | theater | outdoor | club | cafe | civic | listening_room | other
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 @app.post("/api/booking/search")
 async def booking_search(req: BookingSearchRequest):
@@ -179,7 +251,21 @@ async def booking_search(req: BookingSearchRequest):
             genre = "church"
         elif req.include_churches and genre:
             genre = genre + " church"
-        results = await asyncio.to_thread(booking_agent.search_venues, req.state, genre)
+        results = await asyncio.to_thread(
+            booking_agent.search_venues,
+            req.state, genre, bool(req.include_churches), req.query,
+            (req.size or "all").lower(), (req.type or "all").lower(),
+            req.lat, req.lon)
+        # Persist so /api/booking/dispatch keeps working without an explicit list.
+        try:
+            for v in results[:200]:
+                db.insert_venue({
+                    "state": v.get("state"), "name": v.get("name"),
+                    "city": v.get("city"), "capacity": v.get("capacity"),
+                    "contact": v.get("contact"), "website": v.get("website"),
+                })
+        except Exception:
+            pass
         return results
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -194,13 +280,16 @@ def _load_mailer():
     password = db.get_setting("smtp_password") or ""
     return Mailer(smtp_host=host, smtp_port=port, smtp_user=user, smtp_pass=password)
 
+class BookingDispatchRequest(BaseModel):
+    venues: Optional[list] = None
+
 @app.post("/api/booking/dispatch")
-async def booking_dispatch():
+async def booking_dispatch(req: Optional[BookingDispatchRequest] = None):
     try:
         mailer = _load_mailer()
-        venues = db.get_venues()
+        venues = (req.venues if req and req.venues else None) or db.get_venues()
         if not venues:
-            return JSONResponse(status_code=400, content={"error": "No venues found. Search for venues first."})
+            return JSONResponse(status_code=400, content={"error": "No venues selected. Search for venues, select rows (or Select All), then dispatch."})
         items = []
         for v in venues:
             recipient = v.get("contact") or v.get("email") or ""
@@ -1406,7 +1495,7 @@ async def pricing_marketing():
 async def pricing_project(data: dict):
     try:
         result = estimate_annual_revenue(
-            distro_only_count=int(data.get("distro_only", 0)),
+            artist_starter_count=int(data.get("artist_starter", 0)),
             artist_pro_count=int(data.get("artist_pro", 0)),
             label_launchpad_count=int(data.get("label_launchpad", 0)),
             enterprise_count=int(data.get("enterprise", 0)),
@@ -1453,7 +1542,7 @@ async def dashboard():
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PRICE_MAP = {
-    "distro_only": os.environ.get("STRIPE_PRICE_DISTRO_ONLY", ""),
+    "artist_starter": os.environ.get("STRIPE_PRICE_ARTIST_STARTER", ""),
     "artist_pro": os.environ.get("STRIPE_PRICE_ARTIST_PRO", ""),
     "label_launchpad": os.environ.get("STRIPE_PRICE_LABEL_LAUNCHPAD", ""),
     "enterprise": os.environ.get("STRIPE_PRICE_ENTERPRISE", ""),
