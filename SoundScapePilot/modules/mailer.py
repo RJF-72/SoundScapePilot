@@ -1,13 +1,20 @@
+import base64
+import hashlib
+import logging
 import smtplib
 import dns.resolver
 import socket
 import ssl
 import uuid
 import os
+import re
 import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import formatdate, make_msgid
 from typing import List, Dict, Any, Optional
+
+logger = logging.getLogger("soundscape.mailer")
 
 # Default self-hosted domain for Redemption Road Music Group.
 DEFAULT_DOMAIN = os.getenv("SOUNDSCAPE_MAIL_DOMAIN", "redemptionroadmg.com")
@@ -76,10 +83,113 @@ class Mailer:
         except Exception:
             return None
 
-    def _sign_dkim(self, msg: MIMEMultipart) -> MIMEMultipart:
-        """Placeholder for proprietary DKIM signing. In production this uses rsa-sha256."""
-        msg["X-SoundScape-DKIM"] = "signed"
-        return msg
+    def _dkim_key(self) -> Optional[bytes]:
+        """Load the DKIM RSA private key from env/config. Returns None
+        (no error) when DKIM is simply not configured."""
+        pem = os.getenv("SOUNDSCAPE_DKIM_PRIVATE_KEY", "")
+        if "\\n" in pem:
+            pem = pem.replace("\\n", "\n")
+        key_file = os.getenv("SOUNDSCAPE_DKIM_PRIVATE_KEY_FILE", "")
+        if not pem and key_file:
+            try:
+                with open(key_file, "r", encoding="utf-8") as f:
+                    pem = f.read()
+            except Exception as e:
+                logger.warning("DKIM: could not read key file %s: %s", key_file, e)
+                return None
+        if not pem:
+            return None
+        return pem.encode("utf-8")
+
+    def _dkim_sign(self, raw_message: str) -> Optional[str]:
+        """Prepend a real DKIM-Signature header (rsa-sha256, relaxed
+        header / simple body canonicalization, RFC 6376) to a serialized
+        message. Returns the signed message, or None when DKIM is not
+        configured or signing fails — the caller then sends the message
+        WITHOUT any signature claim."""
+        key_pem = self._dkim_key()
+        if not key_pem:
+            if not getattr(self, "_dkim_logged_unconfigured", False):
+                logger.info("DKIM: no private key configured (set SOUNDSCAPE_DKIM_PRIVATE_KEY or "
+                            "SOUNDSCAPE_DKIM_PRIVATE_KEY_FILE to enable); sending without signature")
+                self._dkim_logged_unconfigured = True
+            return None
+        try:
+            from cryptography.hazmat.primitives import hashes, serialization
+            from cryptography.hazmat.primitives.asymmetric import padding as rsa_padding
+        except Exception:
+            if not getattr(self, "_dkim_logged_nolib", False):
+                logger.warning("DKIM: 'cryptography' package not installed; sending without signature")
+                self._dkim_logged_nolib = True
+            return None
+        try:
+            private_key = serialization.load_pem_private_key(key_pem, password=None)
+        except Exception as e:
+            logger.warning("DKIM: failed to load private key: %s", e)
+            return None
+
+        domain = os.getenv("SOUNDSCAPE_DKIM_DOMAIN", DEFAULT_DOMAIN)
+        selector = os.getenv("SOUNDSCAPE_DKIM_SELECTOR", "soundscape")
+
+        raw = raw_message.replace("\r\n", "\n").replace("\n", "\r\n")
+        header_blob, _, body = raw.partition("\r\n\r\n")
+
+        # Simple body canonicalization: drop trailing empty lines, single CRLF at end.
+        blines = body.split("\r\n")
+        while blines and blines[-1] == "":
+            blines.pop()
+        body_canon = "\r\n".join(blines) + ("\r\n" if blines else "")
+        bh = base64.b64encode(hashlib.sha256(body_canon.encode("utf-8")).digest()).decode("ascii")
+
+        # Parse headers (unfold), keeping order.
+        headers: List[tuple] = []
+        cur_name: Optional[str] = None
+        cur_val = ""
+        for line in header_blob.split("\r\n"):
+            if line[:1] in (" ", "\t") and cur_name is not None:
+                cur_val += " " + line.strip()
+                continue
+            if cur_name is not None:
+                headers.append((cur_name, cur_val))
+            if ":" not in line:
+                cur_name, cur_val = None, ""
+                continue
+            cur_name, _, v = line.partition(":")
+            cur_name = cur_name.strip().lower()
+            cur_val = v.strip()
+        if cur_name is not None:
+            headers.append((cur_name, cur_val))
+
+        def relaxed(value: str) -> str:
+            return re.sub(r"\s+", " ", value).strip()
+
+        sign_names = ["from", "to", "subject", "date", "message-id", "mime-version", "content-type"]
+        present = [n for n in sign_names if any(h[0] == n for h in headers)]
+        if not present:
+            return None
+
+        sign_blob = b""
+        for name in present:
+            # RFC 6376: sign the LAST instance of each header name.
+            val = next(v for n, v in reversed(headers) if n == name)
+            sign_blob += f"{name}:{relaxed(val)}\r\n".encode("utf-8")
+
+        # DKIM-Signature VALUE (tag list, b= empty). The header is hashed
+        # as "dkim-signature:" + value with no trailing CRLF.
+        dkim_value = (f"v=1; a=rsa-sha256; c=relaxed/simple; d={domain}; "
+                      f"s={selector}; h={':'.join(present)}; bh={bh}; b=")
+        sign_blob += ("dkim-signature:" + dkim_value).encode("utf-8")
+
+        try:
+            sig = private_key.sign(sign_blob, rsa_padding.PKCS1v15(), hashes.SHA256())
+        except Exception as e:
+            logger.warning("DKIM: signing failed: %s", e)
+            return None
+        b64sig = base64.b64encode(sig).decode("ascii")
+        # Fold the b= value to ~73 chars per line.
+        folded = [b64sig[i:i + 73] for i in range(0, len(b64sig), 73)]
+        dkim_header = "DKIM-Signature: " + dkim_value + "\r\n\t" + "\r\n\t".join(folded) + "\r\n"
+        return dkim_header + raw
 
     def _build_message(self, owner: Dict[str, str], recipient: str, subject: str,
                        body: str, module: str, tracking_id: str) -> MIMEMultipart:
@@ -87,6 +197,8 @@ class Mailer:
         msg["From"] = f"{owner['name']} <{owner['email']}>"
         msg["To"] = recipient
         msg["Subject"] = subject
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain=os.getenv("SOUNDSCAPE_DKIM_DOMAIN", DEFAULT_DOMAIN))
         msg["X-SoundScape-Tracking-ID"] = tracking_id
         msg["X-SoundScape-Module"] = module
         msg["Reply-To"] = owner["email"]
@@ -95,7 +207,7 @@ class Mailer:
         html_body = body.replace('\n', '<br>').replace('\r', '')
         tracking_pixel = f"<img src='http://127.0.0.1:{os.environ.get('PORT', '8765')}/track/{tracking_id}.gif' width='1' height='1'/>"
         msg.attach(MIMEText(f"<html><body>{html_body}{tracking_pixel}</body></html>", 'html'))
-        return self._sign_dkim(msg)
+        return msg
 
     def send_email(self, recipient: str, subject: str, body: str,
                    module: str = "general", sender_name: Optional[str] = None,
@@ -108,6 +220,11 @@ class Mailer:
         from_addr = owner["email"]
         tracking_id = str(uuid.uuid4())[:12]
         msg = self._build_message(owner, recipient, subject, body, module, tracking_id)
+
+        # Real DKIM signature when a key is configured; otherwise the
+        # message goes out WITHOUT any signature claim (never faked).
+        signed = self._dkim_sign(msg.as_string())
+        raw_message = signed if signed is not None else msg.as_string().replace("\n", "\r\n")
 
         result = {
             "owner": owner["name"],
@@ -128,14 +245,14 @@ class Mailer:
                         raise Exception("MX record not found")
                     with smtplib.SMTP(mx, 25, timeout=15) as server:
                         server.starttls(context=ssl.create_default_context())
-                        server.sendmail(from_addr, [recipient], msg.as_string())
+                        server.sendmail(from_addr, [recipient], raw_message)
                 else:
                     if not self.smtp_host or not self.smtp_user or not self.smtp_pass:
                         raise Exception("SMTP credentials not configured. Set smtp_host, smtp_user, smtp_pass.")
                     with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15) as server:
                         server.starttls(context=ssl.create_default_context())
                         server.login(self.smtp_user, self.smtp_pass)
-                        server.sendmail(from_addr, [recipient], msg.as_string())
+                        server.sendmail(from_addr, [recipient], raw_message)
 
                 result["status"] = "sent"
                 result["error"] = None

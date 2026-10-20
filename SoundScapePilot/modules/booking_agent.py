@@ -368,13 +368,29 @@ class BookingAgent:
     def __init__(self):
         self._last_req = 0.0
         self._genre = "live music"
-        self.client = httpx.Client(timeout=12.0, headers={
-            "User-Agent": "SoundScapePilot-BookingBot/1.0 (Music Industry Research)",
-            "Accept-Language": "en-US,en;q=0.9"
-        }, follow_redirects=True)
+        # HTTP client is created lazily on first use (see the `client`
+        # property below): constructing httpx.Client at import/init time
+        # reads proxy environment variables, and a malformed proxy config
+        # (e.g. a bad NO_PROXY) used to crash the whole server at startup.
+        self._client = None
         self._osm_cache: Dict[str, List[Dict[str, Any]]] = {}
         self._geo_cache: Dict[str, Optional[Dict[str, Any]]] = {}
         self._gplaces_cache: Dict[str, List[Dict[str, Any]]] = {}
+
+    @property
+    def client(self) -> httpx.Client:
+        if self._client is None:
+            # trust_env=False: ignore proxy environment variables so a
+            # broken proxy config can never take the app down.
+            self._client = httpx.Client(timeout=12.0, headers={
+                "User-Agent": "SoundScapePilot-BookingBot/1.0 (Music Industry Research)",
+                "Accept-Language": "en-US,en;q=0.9"
+            }, follow_redirects=True, trust_env=False)
+        return self._client
+
+    @client.setter
+    def client(self, value: Optional[httpx.Client]):
+        self._client = value
 
     # ------------------------------------------------------------------ #
     # HTTP helpers

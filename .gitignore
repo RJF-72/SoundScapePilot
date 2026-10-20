@@ -17,3 +17,6 @@ install*.log
 
 # Legacy pre-rebrand scratch (superseded by SoundScapePilot/)
 T7/
+
+# Installer binaries are build artifacts — build locally with build_msi.bat
+*.msi

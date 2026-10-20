@@ -75,10 +75,25 @@ STATE_LIST_PAGES = [
 class PRWire:
     def __init__(self):
         self._last_req = 0.0
-        self.client = httpx.Client(timeout=12.0, headers={
-            "User-Agent": "SoundScapePilot-PRWire/1.0 (Music Industry Research)",
-            "Accept-Language": "en-US,en;q=0.9"
-        }, follow_redirects=True)
+        # HTTP client is created lazily on first use (see the `client`
+        # property below) so a malformed proxy environment cannot crash
+        # the server at import/startup time.
+        self._client = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            # trust_env=False: ignore proxy environment variables so a
+            # broken proxy config can never take the app down.
+            self._client = httpx.Client(timeout=12.0, headers={
+                "User-Agent": "SoundScapePilot-PRWire/1.0 (Music Industry Research)",
+                "Accept-Language": "en-US,en;q=0.9"
+            }, follow_redirects=True, trust_env=False)
+        return self._client
+
+    @client.setter
+    def client(self, value):
+        self._client = value
 
     def _rate_limit(self):
         elapsed = time.time() - self._last_req

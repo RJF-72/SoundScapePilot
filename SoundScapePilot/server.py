@@ -81,11 +81,37 @@ def sanitize_html(text: str) -> str:
 app = FastAPI(title="SoundScape Pilot", version="1.0.0")
 
 # JWT / owner allowlist
-JWT_SECRET = os.environ.get("JWT_SECRET", "")
+# Credentials are read from the environment first, then from the
+# launcher-managed config file (%APPDATA%/SoundScapePilot/config.json)
+# that launcher.py creates on first run. There is intentionally NO
+# default password and NO auto-generated secret here: if neither source
+# provides them, the server refuses to start (fail fast) instead of
+# booting with insecure defaults.
+def _launcher_config() -> dict:
+    candidates = []
+    if os.environ.get("SOUNDSCAPE_CONFIG"):
+        candidates.append(os.environ["SOUNDSCAPE_CONFIG"])
+    appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+    candidates.append(os.path.join(appdata, "SoundScapePilot", "config.json"))
+    for path in candidates:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                if isinstance(cfg, dict):
+                    return cfg
+        except Exception:
+            continue
+    return {}
+
+_LAUNCHER_CFG = _launcher_config()
+
+JWT_SECRET = os.environ.get("JWT_SECRET", "") or _LAUNCHER_CFG.get("jwt_secret", "")
 if not JWT_SECRET:
-    import secrets
-    JWT_SECRET = secrets.token_urlsafe(48)
-    print("WARNING: JWT_SECRET not set, generated random secret. Set JWT_SECRET in production!")
+    print("ERROR: JWT_SECRET is not set and no launcher config file was found. "
+          "Set the JWT_SECRET environment variable, or run the desktop launcher once "
+          "(it creates %APPDATA%/SoundScapePilot/config.json with owner credentials). "
+          "Refusing to start without an owner secret.", file=sys.stderr)
+    sys.exit(1)
 
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = int(os.environ.get("JWT_EXPIRE_HOURS", "24"))
@@ -93,13 +119,18 @@ JWT_EXPIRE_HOURS = int(os.environ.get("JWT_EXPIRE_HOURS", "24"))
 _owner_emails_env = os.environ.get("OWNER_EMAILS", "") or os.environ.get("SOUNDSCAPE_OWNER_EMAILS", "")
 if _owner_emails_env:
     OWNER_EMAILS = {e.strip().lower() for e in _owner_emails_env.split(",") if e.strip()}
+elif _LAUNCHER_CFG.get("owner_email"):
+    OWNER_EMAILS = {_LAUNCHER_CFG["owner_email"].strip().lower()}
 else:
     OWNER_EMAILS = {"admin@localhost"}
 
-OWNER_MASTER_PASSWORD = os.environ.get("OWNER_MASTER_PASSWORD", "")
+OWNER_MASTER_PASSWORD = os.environ.get("OWNER_MASTER_PASSWORD", "") or _LAUNCHER_CFG.get("owner_password", "")
 if not OWNER_MASTER_PASSWORD:
-    OWNER_MASTER_PASSWORD = "changeme"
-    print("WARNING: OWNER_MASTER_PASSWORD not set, using default. Change in production!")
+    print("ERROR: OWNER_MASTER_PASSWORD is not set and no launcher config file was found. "
+          "Set the OWNER_MASTER_PASSWORD environment variable, or run the desktop launcher once "
+          "(it creates %APPDATA%/SoundScapePilot/config.json with owner credentials). "
+          "Refusing to start without an owner password.", file=sys.stderr)
+    sys.exit(1)
 
 security = HTTPBearer()
 

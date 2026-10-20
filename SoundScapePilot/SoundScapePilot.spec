@@ -11,7 +11,10 @@ a = Analysis(
     ['launcher.py'],
     pathex=[],
     binaries=webview_binaries + pydantic_core_binaries,
-    datas=[('static', 'static'), ('web', 'web'), ('modules', 'modules')] + webview_datas + pydantic_core_datas,
+    # NOTE: the web/ Next.js scaffold was removed from the repo (2026-10-20) — it did
+    # not build and was the label-site scaffold, not the product UI. The product UI is
+    # the static SPA served by the backend at /.
+    datas=[('static', 'static'), ('modules', 'modules')] + webview_datas + pydantic_core_datas,
     hiddenimports=[
         'webview',
         'webview.platforms.edgechromium',

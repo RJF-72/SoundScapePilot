@@ -181,16 +181,6 @@
           </Directory>
               <Directory Id="DIR__internal_tornado" Name="tornado">
           </Directory>
-              <Directory Id="DIR__internal_web" Name="web">
-                <Directory Id="DIR__internal_web_app" Name="app">
-                  <Directory Id="DIR__internal_web_app_login" Name="login">
-          </Directory>
-                  <Directory Id="DIR__internal_web_app_marketing" Name="marketing">
-          </Directory>
-                  <Directory Id="DIR__internal_web_app_mercantile" Name="mercantile">
-          </Directory>
-          </Directory>
-          </Directory>
               <Directory Id="DIR__internal_webview" Name="webview">
                 <Directory Id="DIR__internal_webview___pyinstaller" Name="__pyinstaller">
           </Directory>
@@ -231,16 +221,6 @@
             <Directory Id="DIR_modules" Name="modules">
           </Directory>
             <Directory Id="DIR_static" Name="static">
-          </Directory>
-            <Directory Id="DIR_web" Name="web">
-              <Directory Id="DIR_web_app" Name="app">
-                <Directory Id="DIR_web_app_login" Name="login">
-          </Directory>
-                <Directory Id="DIR_web_app_marketing" Name="marketing">
-          </Directory>
-                <Directory Id="DIR_web_app_mercantile" Name="mercantile">
-          </Directory>
-          </Directory>
           </Directory>
           </Directory>
         </Directory>
@@ -333,38 +313,6 @@
       </Component>
       <Component Id="cmp_17" Directory="DIR_static" Guid="{9F6F775D-147B-4624-8185-F52369C3A677}">
         <File Id="fil_17" Source="dist\SoundScapePilot\static\logo.png" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_18" Directory="DIR_web" Guid="{CD9CB924-427F-4D1F-B010-E4972F4E2A45}">
-        <File Id="fil_18" Source="dist\SoundScapePilot\web\next-env.d.ts" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_19" Directory="DIR_web" Guid="{B3AF238E-DD38-41A4-A513-F9A650C0FBA3}">
-        <File Id="fil_19" Source="dist\SoundScapePilot\web\package-lock.json" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_20" Directory="DIR_web" Guid="{3C549928-20B4-4719-B86E-02A9B479F649}">
-        <File Id="fil_20" Source="dist\SoundScapePilot\web\package.json" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_21" Directory="DIR_web_app" Guid="{4E6E8901-A592-4123-86D9-C917EE2C6D54}">
-        <File Id="fil_21" Source="dist\SoundScapePilot\web\app\layout.tsx" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_22" Directory="DIR_web_app" Guid="{AE76690D-7B17-40E5-AA8D-1EB693BFB439}">
-        <File Id="fil_22" Source="dist\SoundScapePilot\web\app\page.tsx" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_23" Directory="DIR_web_app_login" Guid="{F41E2357-E54E-464C-86BF-6111ED1A1525}">
-        <File Id="fil_23" Source="dist\SoundScapePilot\web\app\login\page.tsx" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_24" Directory="DIR_web_app_marketing" Guid="{973F0D09-5069-4816-8F61-54B3994C29A3}">
-        <File Id="fil_24" Source="dist\SoundScapePilot\web\app\marketing\page.tsx" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_25" Directory="DIR_web_app_mercantile" Guid="{A64834D5-1125-4F33-B7D0-A934F4A6B2B7}">
-        <File Id="fil_25" Source="dist\SoundScapePilot\web\app\mercantile\page.tsx" KeyPath="no" />
         <CreateFolder />
       </Component>
       <Component Id="cmp_26" Directory="DIR__internal" Guid="{AAE0E760-CD29-4E4C-9AA7-DCFE1A20A057}">
@@ -925,38 +873,6 @@
       </Component>
       <Component Id="cmp_165" Directory="DIR__internal_tornado" Guid="{6A395E43-BA4C-4D27-8CC3-BF2A244AC104}">
         <File Id="fil_165" Source="dist\SoundScapePilot\_internal\tornado\speedups.pyd" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_166" Directory="DIR__internal_web" Guid="{85242371-ABD3-42BF-8C57-A2A83D6D13D1}">
-        <File Id="fil_166" Source="dist\SoundScapePilot\_internal\web\next-env.d.ts" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_167" Directory="DIR__internal_web" Guid="{7FDD8CAB-7433-4B12-9736-2B186FDBF958}">
-        <File Id="fil_167" Source="dist\SoundScapePilot\_internal\web\package-lock.json" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_168" Directory="DIR__internal_web" Guid="{20CD51AF-54F4-4DEC-9235-2AC0F13E37EF}">
-        <File Id="fil_168" Source="dist\SoundScapePilot\_internal\web\package.json" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_169" Directory="DIR__internal_web_app" Guid="{1B2B59F2-DC35-4E1B-9F8E-AD2FB343F500}">
-        <File Id="fil_169" Source="dist\SoundScapePilot\_internal\web\app\layout.tsx" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_170" Directory="DIR__internal_web_app" Guid="{BE0AEC15-8142-4C61-964A-B788DFA9F73D}">
-        <File Id="fil_170" Source="dist\SoundScapePilot\_internal\web\app\page.tsx" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_171" Directory="DIR__internal_web_app_login" Guid="{7F120721-C6DF-41E2-A7A0-F1282DB1D0C9}">
-        <File Id="fil_171" Source="dist\SoundScapePilot\_internal\web\app\login\page.tsx" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_172" Directory="DIR__internal_web_app_marketing" Guid="{72DD6FC6-6CB0-48B9-A9E0-250A1CEA7ECE}">
-        <File Id="fil_172" Source="dist\SoundScapePilot\_internal\web\app\marketing\page.tsx" KeyPath="no" />
-        <CreateFolder />
-      </Component>
-      <Component Id="cmp_173" Directory="DIR__internal_web_app_mercantile" Guid="{412F6F25-2EDE-4F38-A3E8-72C6DE6A0320}">
-        <File Id="fil_173" Source="dist\SoundScapePilot\_internal\web\app\mercantile\page.tsx" KeyPath="no" />
         <CreateFolder />
       </Component>
       <Component Id="cmp_174" Directory="DIR__internal_webview" Guid="{A0F5585C-FCBF-49CF-A1AD-88C3297747FE}">
