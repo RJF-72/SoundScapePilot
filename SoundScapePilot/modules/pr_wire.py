@@ -115,7 +115,7 @@ class PRWire:
         return {}
 
     def _extract_state(self, topic: str) -> str:
-        tl = topic.lower()
+        tl = (topic or "").lower()
         for s in US_STATES_LIST:
             if s.lower() in tl:
                 return s
@@ -137,7 +137,7 @@ class PRWire:
         return ""
 
     def _detect_topics(self, topic: str) -> list:
-        tl = topic.lower()
+        tl = (topic or "").lower()
         matched = []
         for key in LIST_PAGE_MAP:
             if key in tl:
@@ -492,7 +492,7 @@ class PRWire:
     }
 
     def get_outlets(self, topic: str) -> List[Dict[str, Any]]:
-        tl = topic.lower()
+        tl = (topic or "").lower()
 
         # 1. Always include curated data in the library.
         curated = []

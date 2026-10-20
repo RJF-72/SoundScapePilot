@@ -204,7 +204,7 @@ class RadioFinder:
         return list(seen.values())
 
     def _curated_for_genre(self, genre: str) -> List[Dict[str, Any]]:
-        genre_l = genre.lower()
+        genre_l = (genre or "").lower()
         # Direct match
         if genre_l in CURATED_STATIONS:
             return CURATED_STATIONS[genre_l]
@@ -299,7 +299,7 @@ class RadioFinder:
         if not table:
             return []
         rows = table.find_all("tr")[1:]
-        genre_l = genre.lower()
+        genre_l = (genre or "").lower()
         out = []
         seen = set()
         for row in rows:
@@ -429,7 +429,7 @@ class RadioFinder:
 
     def _score(self, text: str, genre: str) -> float:
         text_l = text.lower()
-        genre_l = genre.lower()
+        genre_l = (genre or "").lower()
         score = 0.0
         if genre_l in text_l:
             score += 50.0

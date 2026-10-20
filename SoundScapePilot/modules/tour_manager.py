@@ -156,7 +156,7 @@ def _resolve_anchor(home_city: str, index: Dict[str, Dict[str, Any]]) -> tuple:
     tail = raw.rsplit(",", 1)[-1].strip() if "," in raw else raw
     if len(tail) == 2 and tail.upper() in STATE_ABBR:
         state_guess = STATE_ABBR[tail.upper()]
-    elif tail.title() in {s for s in index[c]["state"] for c in index}:
+    elif tail.title() in {index[c]["state"] for c in index}:
         state_guess = tail.title()
     if state_guess:
         in_state = [c for c in index if index[c]["state"] == state_guess]
