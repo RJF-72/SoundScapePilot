@@ -18,6 +18,10 @@ a = Analysis(
     hiddenimports=[
         'webview',
         'webview.platforms.edgechromium',
+        # backend runs in-process on frozen builds (launcher self-exec);
+        # these pull server.py + fastapi/uvicorn/httpx/stripe into the PYZ
+        'server',
+        'uvicorn',
     ] + webview_hidden + pydantic_core_hidden + [
         # engine modules (namespace package: no __init__.py, so be explicit)
         'modules.ai_marketing',

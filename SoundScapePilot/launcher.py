@@ -116,7 +116,16 @@ def main():
     env = os.environ.copy()
     env["PORT"] = str(port)
     server_path = os.path.join(base, "server.py")
-    py_exe = "python" if getattr(sys, "frozen", False) else sys.executable
+    if getattr(sys, "frozen", False):
+        # Self-contained Store/MSIX build: re-exec THIS exe as the backend.
+        # The child sees SOUNDSCAPE_BACKEND=1 and runs uvicorn in-process
+        # (see the __main__ guard below). Never rely on a system `python`.
+        env["SOUNDSCAPE_BACKEND"] = "1"
+        backend_cmd = [sys.executable]
+        py_exe = sys.executable + " (self, backend mode)"
+    else:
+        backend_cmd = [sys.executable, server_path]
+        py_exe = sys.executable
     backend_log_path = os.path.join(APP_DIR, "backend.log")
     backend_log = open(backend_log_path, "w", encoding="utf-8", errors="replace")
     log.info("subprocess: %s %s (exists=%s) env JWT=%s OWNER=%s PYTHONHOME=%s PYTHONPATH=%s",
@@ -124,7 +133,7 @@ def main():
              bool(env.get("JWT_SECRET")), bool(env.get("OWNER_EMAILS")),
              env.get("PYTHONHOME"), env.get("PYTHONPATH"))
     proc = subprocess.Popen(
-        [py_exe, server_path],
+        backend_cmd,
         env=env,
         stdout=backend_log,
         stderr=subprocess.STDOUT,
@@ -173,6 +182,15 @@ def main():
 
 
 if __name__ == "__main__":
+    if os.environ.get("SOUNDSCAPE_BACKEND") == "1":
+        # Backend child process (frozen builds only): run the FastAPI app
+        # from the bundled `server` module and exit with uvicorn.
+        import uvicorn
+        import server
+        uvicorn.run(server.app, host="127.0.0.1",
+                    port=int(os.environ.get("PORT", "8765")),
+                    log_level="info")
+        raise SystemExit(0)
     try:
         main()
     except Exception:
