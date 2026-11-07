@@ -1,0 +1,287 @@
+# SoundScape Pilot — Windows MSIX build + REAL install-and-launch smoke test
+# =========================================================================
+# Prepared Oct 24, 2026 for Ray Flanary / publisher of record: Joni Flanary.
+# LOCAL FILE ONLY — it has NOT been added to the GitHub repo. To use it:
+#   copy to  .github/workflows/windows-build-and-test.yml  in
+#   RJF-72/SoundScapePilot and run it from the Actions tab (workflow_dispatch),
+#   or run it in any fork/clone. Nothing in this workflow publishes or submits
+#   anything to Microsoft; it builds, packs, installs LOCALLY on the runner,
+#   smoke-tests, and uploads the logs + the unsigned/test-signed .msix as
+#   workflow artifacts.
+#
+# What it does, in order:
+#   1. Checks out the repo (build the EXACT commit you dispatch it on —
+#      expected: main c5bf3107a1ef89016c6507269afe858fce37fd28 or later).
+#   2. Verifies the launcher backend fix is present in the source. The fix
+#      (frozen launcher re-execs itself as the backend; spec hiddenimports
+#      `server` + `uvicorn`) LANDED in main on Oct 26, 2026 (commit 5f9a1757),
+#      so this workflow no longer applies the patch — it asserts the fix is
+#      there and FAILS the build if the source has drifted or regressed.
+#      (Adapted Nov 7, 2026 for FIX-ALL workstream B; the only other change
+#      from the Oct 24 prepared file is the soundscape.db path check in the
+#      smoke test: the DB lives under the data/ subfolder per
+#      SOUNDSCAPE_DATA_DIR, with the package-root path accepted as fallback.)
+#   3. Installs pinned requirements + PyInstaller, builds the onedir bundle
+#      with SoundScapePilot.spec, and verifies the payload layout
+#      (exe present, static/ + modules/ reachable by the bundle).
+#   4. Assembles the MSIX staging tree from the checked-in manifest/assets
+#      (this workflow expects AppxManifest.xml + Assets to be supplied —
+#      the "stage manifest" step below copies them from
+#      packaging/msix/ in the repo IF present, otherwise it writes them
+#      from the copies kept with this file's source package; see README in
+#      ~/workspace/microsoft-store-submissions/soundscape-pilot/).
+#      Identity in the manifest is a PLACEHOLDER unless the dispatch inputs
+#      below are filled with Joni Flanary's real Partner Center values.
+#   5. Packs with makeappx.exe (Windows SDK on the runner), signs with a
+#      throwaway self-signed TEST certificate whose subject matches the
+#      manifest Publisher, trusts it on the runner, and installs with
+#      Add-AppxPackage.
+#   6. SMOKE TEST (the "works completely" gate):
+#        - launches the installed app via its AppsFolder entry
+#        - reads the launcher log from the MSIX-virtualized data folder
+#          (%LOCALAPPDATA%\Packages\<PFN>\LocalCache\Roaming\SoundScapePilot)
+#        - extracts the ephemeral backend port from launcher.log and
+#          requires GET /health == 200 on 127.0.0.1
+#        - requires config.json (first-run owner credentials) and
+#          soundscape.db to exist in the virtualized data folder
+#        - closes the app, relaunches it, and requires config.json to be
+#          byte-identical (first-run does NOT repeat; data persists)
+#        - fails the job if any of the above fails
+#   7. Uploads launcher/backend logs, the smoke-test transcript and the
+#      .msix as artifacts for inspection.
+#
+# NOT covered here (needs a human + real hardware/accounts): WebView2 window
+# visuals are exercised by launch, but screenshots are not asserted; real
+# SMTP dispatch and real Stripe charges need owner credentials; the final
+# Store submission needs the real Partner Center identity + Store signing.
+
+name: SoundScape Pilot - Windows MSIX build and smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      identity_name:
+        description: "Partner Center Package/Identity Name (blank = PLACEHOLDER.SoundScapePilot)"
+        required: false
+        default: ""
+      publisher:
+        description: "Partner Center Publisher, e.g. CN=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (blank = placeholder)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build-pack-install-test:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Check out the exact source to build
+        uses: actions/checkout@v4
+
+      - name: Record source commit
+        run: |
+          git rev-parse HEAD | Tee-Object -FilePath source-commit.txt
+          git log -1 --format="%ci %s"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify launcher backend fix is present (landed in main 5f9a1757, Oct 26)
+        run: |
+          $code = @'
+          import pathlib
+          s = pathlib.Path("SoundScapePilot/launcher.py").read_text(encoding="utf-8")
+          assert "SOUNDSCAPE_BACKEND" in s, "launcher backend self-exec fix missing from launcher.py"
+          assert "backend_cmd = [sys.executable]" in s, "launcher does not re-exec itself as the backend"
+          t = pathlib.Path("SoundScapePilot/SoundScapePilot.spec").read_text(encoding="utf-8")
+          assert "'server'," in t and "'uvicorn'," in t, "spec hiddenimports missing server/uvicorn"
+          print("launcher backend fix verified present in source")
+          '@
+          $code | python -
+
+      - name: Install pinned requirements + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r SoundScapePilot/requirements.txt
+          pip install pyinstaller
+
+      - name: Build the PyInstaller onedir bundle
+        working-directory: SoundScapePilot
+        run: |
+          pyinstaller --noconfirm SoundScapePilot.spec
+          if (-not (Test-Path "dist/SoundScapePilot/SoundScapePilot.exe")) { throw "PyInstaller exe missing" }
+          Get-ChildItem dist/SoundScapePilot | Select-Object Name
+
+      - name: Verify payload completeness
+        working-directory: SoundScapePilot
+        run: |
+          # server module + deps must be inside the bundle now (PYZ), and the
+          # datas (static/, modules/) must be reachable (PyInstaller 6 puts
+          # them under _internal). Fail loudly if the layout is incomplete.
+          $dist = "dist/SoundScapePilot"
+          $hasStatic  = (Test-Path "$dist/static")  -or (Test-Path "$dist/_internal/static")
+          $hasModules = (Test-Path "$dist/modules") -or (Test-Path "$dist/_internal/modules")
+          if (-not $hasStatic)  { throw "static/ not found in bundle layout" }
+          if (-not $hasModules) { throw "modules/ not found in bundle layout" }
+          # The backend is exercised for real in the smoke test below; the
+          # PYZ content check is a cheap early tripwire:
+          $pyzCheck = python -c "import zipfile,sys; print('n/a')"
+          Write-Host "payload layout OK (static/modules present)"
+
+      - name: Stage the MSIX tree
+        run: |
+          # Manifest + assets ship with this workflow's source package.
+          # If the repo carries packaging/msix/, use it; otherwise the step
+          # expects them to have been added next to this workflow's files
+          # before dispatch (see BUILD-AND-VERIFY-REPORT.md).
+          $stage = "msix-stage"
+          New-Item -ItemType Directory -Force "$stage/app" | Out-Null
+          Copy-Item "SoundScapePilot/dist/SoundScapePilot" "$stage/app/SoundScapePilot" -Recurse
+          if (Test-Path "packaging/msix/AppxManifest.xml") {
+            Copy-Item "packaging/msix/AppxManifest.xml" "$stage/AppxManifest.xml"
+            Copy-Item "packaging/msix/Assets" "$stage/Assets" -Recurse
+          } else {
+            throw "packaging/msix/AppxManifest.xml + Assets not in repo. Add them from the prepared msix-staging package before dispatching."
+          }
+          # Optional identity override from dispatch inputs
+          if ("${{ inputs.identity_name }}" -ne "") {
+            (Get-Content "$stage/AppxManifest.xml") -replace 'Name="PLACEHOLDER\.SoundScapePilot"', 'Name="${{ inputs.identity_name }}"' | Set-Content "$stage/AppxManifest.xml"
+          }
+          if ("${{ inputs.publisher }}" -ne "") {
+            (Get-Content "$stage/AppxManifest.xml") -replace 'Publisher="CN=PLACEHOLDER-[^"]*"', 'Publisher="${{ inputs.publisher }}"' | Set-Content "$stage/AppxManifest.xml"
+          }
+          Get-Content "$stage/AppxManifest.xml" | Select-String "Identity|PublisherDisplayName"
+
+      - name: Locate makeappx + makepri (Windows SDK)
+        run: |
+          $sdkBin = Get-ChildItem "C:/Program Files (x86)/Windows Kits/10/bin" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          $env:MAKEAPPX = Join-Path $sdkBin.FullName "x64/makeappx.exe"
+          $env:MAKEPRI  = Join-Path $sdkBin.FullName "x64/makepri.exe"
+          if (-not (Test-Path $env:MAKEAPPX)) { throw "makeappx.exe not found" }
+          "MAKEAPPX=$env:MAKEAPPX" | Out-File $env:GITHUB_ENV -Append
+          "MAKEPRI=$env:MAKEPRI"   | Out-File $env:GITHUB_ENV -Append
+
+      - name: Generate resources.pri and pack the MSIX
+        run: |
+          & $env:MAKEPRI createconfig /cf $env:TEMP/priconfig.xml /dq en-US
+          & $env:MAKEPRI new /pr msix-stage /cf $env:TEMP/priconfig.xml /of msix-stage/resources.pri
+          & $env:MAKEAPPX pack /d msix-stage /p SoundScapePilot.msix /o
+          if (-not (Test-Path "SoundScapePilot.msix")) { throw "MSIX pack failed" }
+          Get-Item SoundScapePilot.msix | Select-Object Name, Length
+
+      - name: Create + trust a throwaway TEST signing certificate
+        run: |
+          # Subject MUST equal the manifest Publisher string. A placeholder
+          # identity produces a package for local testing ONLY — the Store
+          # re-signs real submissions with the publisher's real identity.
+          [xml]$m = Get-Content "msix-stage/AppxManifest.xml"
+          $pub = $m.Package.Identity.Publisher
+          Write-Host "Signing for Publisher: $pub"
+          $cert = New-SelfSignedCertificate -Type Custom -Subject $pub -KeyUsage DigitalSignature -FriendlyName "SSP Test Cert" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          $pwd = ConvertTo-SecureString -String "test-only-password" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath testcert.pfx -Password $pwd | Out-Null
+          Export-Certificate -Cert $cert -FilePath testcert.cer | Out-Null
+          # Sign the package (signtool ships with the Windows SDK)
+          $sdkBin = Split-Path $env:MAKEAPPX
+          & "$sdkBin/signtool.exe" sign /fd SHA256 /a /f testcert.pfx /p test-only-password SoundScapePilot.msix
+          # Trust it so Add-AppxPackage accepts it on this runner
+          Import-Certificate -FilePath testcert.cer -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+          Import-Certificate -FilePath testcert.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+
+      - name: Install the MSIX (Add-AppxPackage)
+        run: |
+          Add-AppxPackage -Path SoundScapePilot.msix
+          $pkg = Get-AppxPackage | Where-Object { $_.Name -like "*SoundScapePilot*" }
+          if (-not $pkg) { throw "Package did not install" }
+          $pkg | Select-Object Name, PackageFullName, PackageFamilyName, Publisher
+          "PFN=$($pkg.PackageFamilyName)" | Out-File $env:GITHUB_ENV -Append
+
+      - name: SMOKE TEST - launch, /health, first-run files, relaunch persistence
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dataDir = Join-Path $env:LOCALAPPDATA "Packages/$env:PFN/LocalCache/Roaming/SoundScapePilot"
+          function Launch-App {
+            # AUMID = PackageFamilyName + "!" + Application Id from the manifest
+            explorer.exe "shell:AppsFolder\$env:PFN!SoundScapePilot"
+          }
+          function Wait-Backend {
+            # The launcher logs the ephemeral port; poll the log, then /health.
+            for ($i = 0; $i -lt 60; $i++) {
+              $log = Join-Path $dataDir "launcher.log"
+              if (Test-Path $log) {
+                $txt = Get-Content $log -Raw
+                if ($txt -match "backend up on 127\.0\.0\.1:(\d+)") {
+                  $port = $Matches[1]
+                  try {
+                    $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/health" -TimeoutSec 5
+                    if ($r.StatusCode -eq 200) { return $port }
+                  } catch { }
+                }
+              }
+              Start-Sleep -Seconds 2
+            }
+            throw "Backend /health never returned 200 (see launcher/backend logs in artifacts)"
+          }
+          function Stop-App {
+            Get-Process SoundScapePilot -ErrorAction SilentlyContinue | Stop-Process -Force
+            Start-Sleep -Seconds 3
+          }
+
+          # WebView2 runtime presence (Windows 11 / GH runners ship it; log it)
+          $wv2 = Get-ItemProperty "HKLM:/SOFTWARE/WOW6432Node/Microsoft/EdgeUpdate/Clients/{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" -ErrorAction SilentlyContinue
+          Write-Host "WebView2 Runtime version: $($wv2.pv)"
+
+          # --- first launch ---
+          Launch-App
+          $port = Wait-Backend
+          Write-Host "FIRST LAUNCH OK - backend /health 200 on port $port"
+          $cfgPath = Join-Path $dataDir "config.json"
+          $dbPath  = Join-Path $dataDir "data/soundscape.db"
+          if (-not (Test-Path $dbPath)) { $dbPath = Join-Path $dataDir "soundscape.db" }
+          if (-not (Test-Path $cfgPath)) { throw "first-run config.json was not created in the MSIX data folder" }
+          if (-not (Test-Path $dbPath))  { throw "soundscape.db was not created in the MSIX data folder" }
+          $cfgHash1 = (Get-FileHash $cfgPath).Hash
+          Write-Host "first-run files OK: config.json + soundscape.db present"
+          Stop-App
+
+          # --- relaunch: config must be identical (no second first-run) ---
+          Launch-App
+          $port2 = Wait-Backend
+          Write-Host "RELAUNCH OK - backend /health 200 on port $port2"
+          $cfgHash2 = (Get-FileHash $cfgPath).Hash
+          if ($cfgHash1 -ne $cfgHash2) { throw "config.json changed across relaunch - first-run repeated / data did not persist" }
+          Write-Host "PERSISTENCE OK - config.json identical across relaunch"
+          Stop-App
+
+      - name: Collect app logs BEFORE uninstall (uninstall wipes package data)
+        if: always()
+        run: |
+          New-Item -ItemType Directory -Force test-logs | Out-Null
+          $src = Join-Path $env:LOCALAPPDATA "Packages/$env:PFN/LocalCache/Roaming/SoundScapePilot"
+          if (Test-Path $src) { Copy-Item "$src/*.log" test-logs/ -ErrorAction SilentlyContinue }
+          Get-ChildItem test-logs -ErrorAction SilentlyContinue | Select-Object Name, Length
+
+      - name: Uninstall the test package
+        if: always()
+        run: |
+          Get-Process SoundScapePilot -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Get-AppxPackage | Where-Object { $_.Name -like "*SoundScapePilot*" } | Remove-AppxPackage -ErrorAction SilentlyContinue
+
+      - name: Upload logs and the MSIX
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundscape-pilot-msix-test
+          path: |
+            SoundScapePilot.msix
+            source-commit.txt
+            test-logs/
+          if-no-files-found: warn

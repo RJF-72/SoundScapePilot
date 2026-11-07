@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SoundScape Pilot — Microsoft Store MSIX manifest (STAGING / PLACEHOLDER IDENTITY)
+
+  *** NOT SUBMITTABLE AS-IS ***
+  Identity Name and Publisher below are PLACEHOLDERS. Before the final pack:
+    1. Reserve "SoundScape Pilot" in Partner Center under the publisher account
+       of record: Joni Flanary (PublisherDisplayName is already set to her name).
+    2. Replace Identity Name with the exact Package/Identity Name Partner Center assigns.
+    3. Replace Identity Publisher with the exact Publisher string (CN=<GUID>) from
+       Joni Flanary's Partner Center account. The signing certificate subject must
+       match that Publisher string exactly.
+    4. Re-pack and re-sign. A package packed with the placeholder identity must
+       never be submitted or distributed as final.
+
+  Publisher of record: Joni Flanary (per Ray, Oct 24 2026).
+
+  Design notes (see BUILD-AND-VERIFY-REPORT.md for the full risk analysis):
+  - Full-trust Win32 desktop bridge (Windows.FullTrustApplication): the app is a
+    PyInstaller bundle whose launcher spawns its FastAPI backend on 127.0.0.1
+    (ephemeral port) and shows the UI in pywebview / Edge WebView2. Full-trust
+    processes are not AppContainer-isolated, so loopback to its own backend and
+    %APPDATA% writes work; under MSIX those %APPDATA% writes are redirected by
+    file-system virtualization into the package's per-user data folder
+    (%LOCALAPPDATA%\Packages\<PackageFamilyName>\LocalCache\Roaming\SoundScapePilot),
+    which persists across app updates. Data therefore survives updates but is
+    removed on uninstall — same contract as the previous per-user MSI.
+  - WebView2: Windows 11 ships the WebView2 Runtime; on Windows 10 it must be
+    present (evergreen runtime). It is NOT declared as a package dependency
+    because the Store desktop-bridge path has no supported manifest dependency
+    element for it; WINDOWS-TEST.md includes the runtime check + fallback.
+  - internetClient: radio/PR/tour modules make outbound HTTPS calls to public
+    data sources. No server capability is declared: the backend binds loopback
+    only and is reached only by the app's own window.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="PLACEHOLDER.SoundScapePilot"
+    Publisher="CN=PLACEHOLDER-00000000-0000-0000-0000-000000000000"
+    Version="1.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>SoundScape Pilot</DisplayName>
+    <PublisherDisplayName>Joni Flanary</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Self-hosted command center for independent labels and working artists: radio promotion, booking, PR and touring autopilots that run on your own machine. No subscription, your data stays on your computer. $497 lifetime single-user license / $1,497 label license (up to 10 machines), also available in 24 monthly payments via PayPal.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="SoundScapePilot" Executable="app\SoundScapePilot\SoundScapePilot.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="SoundScape Pilot"
+        Description="Self-hosted music-industry command center for indie labels and artists."
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png"
+        Wide310x150Logo="Assets\Wide310x150Logo.png"
+        BackgroundColor="transparent" />
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
