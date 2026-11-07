@@ -162,10 +162,15 @@ jobs:
 
       - name: Locate makeappx + makepri (Windows SDK)
         run: |
-          $sdkBin = Get-ChildItem "C:/Program Files (x86)/Windows Kits/10/bin" -Directory | Sort-Object Name -Descending | Select-Object -First 1
-          $env:MAKEAPPX = Join-Path $sdkBin.FullName "x64/makeappx.exe"
-          $env:MAKEPRI  = Join-Path $sdkBin.FullName "x64/makepri.exe"
-          if (-not (Test-Path $env:MAKEAPPX)) { throw "makeappx.exe not found" }
+          # NOTE (Nov 7 fix): picking the lexically-last bin/ subdir is wrong -
+          # bin/ also contains x64/x86/arm64 dirs which sort after version dirs.
+          # Glob for the tool itself under a versioned x64 folder instead.
+          $makeappx = Get-ChildItem "C:/Program Files (x86)/Windows Kits/10/bin/*/x64/makeappx.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $makeappx) { throw "makeappx.exe not found" }
+          $sdkX64 = $makeappx.Directory.FullName
+          $env:MAKEAPPX = Join-Path $sdkX64 "makeappx.exe"
+          $env:MAKEPRI  = Join-Path $sdkX64 "makepri.exe"
+          if (-not (Test-Path $env:MAKEPRI)) { throw "makepri.exe not found" }
           "MAKEAPPX=$env:MAKEAPPX" | Out-File $env:GITHUB_ENV -Append
           "MAKEPRI=$env:MAKEPRI"   | Out-File $env:GITHUB_ENV -Append
 
