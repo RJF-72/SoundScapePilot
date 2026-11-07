@@ -223,8 +223,14 @@ jobs:
               $log = Join-Path $dataDir "launcher.log"
               if (Test-Path $log) {
                 $txt = Get-Content $log -Raw
-                if ($txt -match "backend up on 127\.0\.0\.1:(\d+)") {
-                  $port = $Matches[1]
+                # Take the LAST match: launcher.log is append-only across
+                # relaunches, and each launch picks a fresh ephemeral port.
+                # (Nov 7 fix: run 42405427575's relaunch came up fine on a new
+                # port per launcher.log, but the first-match regex kept polling
+                # the dead first-launch port and timed out - harness bug.)
+                $allMatches = [regex]::Matches($txt, "backend up on 127\.0\.0\.1:(\d+)")
+                if ($allMatches.Count -gt 0) {
+                  $port = $allMatches[$allMatches.Count - 1].Groups[1].Value
                   try {
                     $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/health" -TimeoutSec 5
                     if ($r.StatusCode -eq 200) { return $port }
